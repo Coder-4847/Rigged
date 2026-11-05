@@ -82,6 +82,17 @@ Built phase by phase (see the master prompt).
   Unlock rules: a level opens when either of the two before it is cleared (so one hard level never blocks you);
   a world opens when 8/10 of the previous world are cleared **or** you hold 9×(world−1) stars.
 
+- **Phase 6 — Input expansion:** every device feeds the same `InputState`.
+  - *Gamepad* (`src/core/Gamepad.ts`): RT gas, LT brake/reverse, left stick / LB·RB / D-pad air tilt, A boost, Y or Select
+    restart, Start pause; radial deadzone, hot-plug toasts, auto-pause on unplug, dual-rumble on crash/landings/finish
+    (setting + reduced-motion aware). Xbox vs PlayStation detection drives the glyphs.
+  - *Touch* (`src/ui/Touch.ts`): BRAKE bottom-left with the tilt pair above it, GAS bottom-right (BOOST when a level
+    allows), restart/pause in the top corners, true multi-touch, no zoom/scroll/long-press, safe-area insets, haptics,
+    landscape prompt + fullscreen/orientation lock attempt on the first Play tap.
+  - *Menus*: D-pad/stick/A/B/Start drive the same focus navigation as the keyboard; the footer prompt bar and level
+    hints switch glyphs (keyboard keys follow your remaps, ✕○△ vs ABXY, GAS/BRAKE for touch) based on the last device used.
+  - Phones default to Low graphics under Auto and the FPS watchdog can lower it further.
+
 Design decisions (ambiguities resolved for fun/readability): brake doubles as reverse once stopped; gas+brake together
 is a handbrake; air tilt is a dedicated axis (Up = nose up).
 

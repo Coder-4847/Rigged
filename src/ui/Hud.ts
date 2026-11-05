@@ -30,6 +30,9 @@ export class Hud {
   private hint: HTMLElement;
   private hintTimer = 0;
   private card?: HTMLDivElement;
+  private cardBack?: () => void;
+  /** Rewrites hint text for the active input device (set by App). */
+  hintAdapter: (t: string) => string = (t) => t;
 
   constructor(private parent: HTMLElement) {
     this.root = document.createElement('div');
@@ -100,7 +103,7 @@ export class Hud {
   }
 
   showHint(text: string, ms = 3000): void {
-    this.hint.textContent = text;
+    this.hint.textContent = this.hintAdapter(text);
     this.hint.classList.add('show');
     clearTimeout(this.hintTimer);
     this.hintTimer = window.setTimeout(() => this.hint.classList.remove('show'), ms);
@@ -136,6 +139,7 @@ export class Hud {
       </div>`;
     this.parent.appendChild(el);
     this.card = el;
+    this.cardBack = onLevels;
     el.querySelector('[data-retry]')!.addEventListener('click', onRetry);
     el.querySelector('[data-levels]')!.addEventListener('click', () => onLevels?.());
     el.querySelector('[data-next]')?.addEventListener('click', onNext);
@@ -166,6 +170,23 @@ export class Hud {
       }
     });
     (el.querySelector<HTMLElement>('[data-next]') ?? el.querySelector<HTMLElement>('[data-retry]'))?.focus();
+  }
+
+  /** Gamepad/keyboard helpers for the complete card (it isn't part of the screen stack). */
+  navigateCard(dir: 'up' | 'down' | 'left' | 'right'): void {
+    if (!this.card) return;
+    const b = [...this.card.querySelectorAll<HTMLElement>('.btn')];
+    const i = b.indexOf(document.activeElement as HTMLElement);
+    const step = dir === 'right' || dir === 'down' ? 1 : -1;
+    b[(i + step + b.length) % b.length]?.focus();
+  }
+
+  activateCard(): void {
+    (document.activeElement as HTMLElement | null)?.closest('.complete') && (document.activeElement as HTMLElement).click();
+  }
+
+  backCard(): void {
+    this.cardBack?.();
   }
 
   hideComplete(): void {

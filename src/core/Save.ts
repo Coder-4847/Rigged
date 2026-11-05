@@ -11,6 +11,8 @@ export interface Settings {
   muted: boolean;
   shake: boolean;
   reducedMotion: boolean;
+  /** Controller vibration. */
+  rumble: boolean;
   touch: 'auto' | 'on' | 'off';
   quality: QualityName | 'auto';
   bindings: Record<Action, string[]>;
@@ -54,6 +56,7 @@ function defaults(): SaveData {
       muted: false,
       shake: true,
       reducedMotion: reduce,
+      rumble: true,
       touch: 'auto',
       quality: 'auto',
       bindings: structuredClone(DEFAULT_BINDINGS),

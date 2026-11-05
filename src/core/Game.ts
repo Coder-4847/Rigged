@@ -127,7 +127,7 @@ export class Game {
     );
 
     const unlock = () => this.audio.unlock();
-    this.input.keyboard.onAnyKey = unlock;
+    window.addEventListener('keydown', unlock);
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', (e) => {
       if (e.code === 'F1') (this.debug.toggle(), e.preventDefault());
@@ -412,7 +412,13 @@ export class Game {
 
   /** Haptics only while actually playing. */
   private buzz(p: number | number[]): void {
-    if (this.mode === 'play' && !this.reduced) navigator.vibrate?.(p);
+    if (this.mode !== 'play' || this.reduced) return;
+    const ms = Array.isArray(p) ? p.reduce((a, b) => a + b, 0) : p;
+    if (this.input.lastDevice === 'gamepad') {
+      // Map the vibration pattern to a dual-rumble pulse: longer = stronger.
+      const k = Math.min(1, ms / 140);
+      this.input.gamepad.rumble(0.25 + k * 0.75, 0.15 + k * 0.6, Math.min(450, 60 + ms * 2));
+    } else if (this.input.lastDevice === 'touch') navigator.vibrate?.(p);
   }
 
   /** Menus: run the AI on a level behind the UI. */
@@ -475,6 +481,7 @@ export class Game {
     this.audio.setVolumes({ master: s.master, sfx: s.sfx, music: s.music });
     this.audio.setMuted(s.muted);
     this.shakeOn = s.shake;
+    this.input.gamepad.rumbleEnabled = s.rumble && !s.reducedMotion;
     this.reduced = s.reducedMotion;
     document.documentElement.classList.toggle('reduce-motion', s.reducedMotion);
     this.autoQuality = s.quality === 'auto';

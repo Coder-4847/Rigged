@@ -56,7 +56,6 @@ export function mainMenu(app: App): Screen {
       btn('Credits', () => app.ui.show('credits')),
     ),
     stars,
-    h('div.foot', {}, 'Arrows / WASD to navigate · Enter to select · Esc to go back'),
   );
   return {
     id: 'main',
@@ -238,7 +237,7 @@ export function settingsScreen(app: App): Screen {
     return h('label.setting', {}, h('span.lab', {}, label), input, val);
   };
 
-  const toggle = (label: string, key: 'muted' | 'shake' | 'reducedMotion', hint = '') => {
+  const toggle = (label: string, key: 'muted' | 'shake' | 'reducedMotion' | 'rumble', hint = '') => {
     const b = h('button.btn.toggle', { 'data-nav': true, role: 'switch' });
     const paint = () => {
       b.textContent = s[key] ? 'On' : 'Off';
@@ -338,6 +337,7 @@ export function settingsScreen(app: App): Screen {
     }
   }, 'danger');
 
+  const padStatus = h('div.padstatus');
   const el = h(
     'div.panel.settings',
     {},
@@ -358,6 +358,8 @@ export function settingsScreen(app: App): Screen {
         toggle('Camera shake', 'shake'),
         toggle('Reduced motion', 'reducedMotion', 'No shake, speed lines or slow-mo'),
         choice('Touch controls', 'touch', [['auto', 'Auto'], ['on', 'Always'], ['off', 'Never']]),
+        toggle('Controller rumble', 'rumble'),
+        padStatus,
       ),
       h('section', {}, h('h3', {}, 'Keyboard controls'), rows, btn('Restore defaults', () => {
         s.bindings = structuredClone(DEFAULT_BINDINGS);
@@ -370,7 +372,11 @@ export function settingsScreen(app: App): Screen {
   return {
     id: 'settings',
     el,
-    onShow: renderBinds,
+    onShow() {
+      renderBinds();
+      const g = app.game.input.gamepad.refresh();
+      padStatus.textContent = g ? `🎮 ${g.kind === 'ps' ? 'PlayStation' : g.kind === 'xbox' ? 'Xbox' : 'Generic'} controller connected` : '🎮 No controller detected — press a button on it';
+    },
     onBack() {
       if (capture) {
         stopCapture();

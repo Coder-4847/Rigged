@@ -4,6 +4,10 @@ import { UI } from './UI';
 import { h } from './dom';
 import { hasLevel } from '../levels/registry';
 import { THEMES } from '../levels/themes';
+import { TouchControls } from './Touch';
+import { PadNav } from './PadNav';
+import { adaptHint, glyph } from './Prompts';
+import type { Device } from '../core/Input';
 import { creditsScreen, levelSelect, mainMenu, pauseMenu, settingsScreen, worldSelect } from './screens';
 
 /**
@@ -16,6 +20,9 @@ export class App {
   readonly ui: UI;
   /** World shown in the level-select screen. */
   currentWorld = 1;
+  readonly touch: TouchControls;
+  private promptBar: HTMLElement;
+  private pads: PadNav;
   private toastEl: HTMLElement;
   private toastTimer = 0;
 
@@ -24,15 +31,45 @@ export class App {
     this.ui = new UI(root);
     this.toastEl = h('div.toast');
     root.appendChild(this.toastEl);
+    this.promptBar = h('div.prompts');
+    root.appendChild(this.promptBar);
+    this.touch = new TouchControls(root);
+    this.game.input.addSource(this.touch, 'touch');
+    document.body.appendChild(h('div.rotate-prompt', {}, h('div', {}, h('div.big-ico', {}, '📱'), 'Rotate your device', h('small', {}, 'RIGGED plays in landscape'))));
 
     for (const make of [mainMenu, worldSelect, levelSelect, pauseMenu, settingsScreen, creditsScreen]) this.ui.register(make(this));
 
     this.ui.onCue = (c) => (c === 'hover' ? this.audio.hover() : c === 'click' ? this.audio.click() : this.audio.hover());
-    this.ui.onChange = () => document.body.classList.toggle('menu-open', this.ui.isOpen);
+    this.ui.onChange = () => {
+      document.body.classList.toggle('menu-open', this.ui.isOpen);
+      this.refreshPrompts();
+    };
 
     this.game.onPauseRequest = () => this.pauseGame();
     this.game.onComplete = (r) => this.showComplete(r);
     this.game.onQualityDrop = (q) => this.toast(`Frame rate was low — graphics set to ${q}`);
+    // --- input devices: glyph prompts, hot-plug, controller menus
+    const input = this.game.input;
+    input.onDeviceChange = (d) => this.deviceChanged(d);
+    window.addEventListener('pointerdown', (e) => input.setDevice(e.pointerType === 'touch' ? 'touch' : 'keyboard'), true);
+    input.gamepad.onConnect = (_n, kind) => {
+      this.toast(`🎮 ${kind === 'ps' ? 'PlayStation' : kind === 'xbox' ? 'Xbox' : 'Generic'} controller connected`);
+      this.refreshPrompts();
+    };
+    input.gamepad.onDisconnect = () => {
+      this.toast('🎮 Controller disconnected');
+      if (this.game.mode === 'play') this.pauseGame();
+      if (input.lastDevice === 'gamepad') input.setDevice('keyboard');
+    };
+    this.pads = new PadNav(() => input.gamepad.refresh(), {
+      active: () => this.ui.isOpen || this.game.hud.completeOpen,
+      activity: () => input.setDevice('gamepad'),
+      move: (d) => (this.ui.isOpen ? this.ui.move(d) : this.game.hud.navigateCard(d)),
+      confirm: () => (this.ui.isOpen ? this.ui.confirm() : this.game.hud.activateCard()),
+      back: () => (this.ui.isOpen ? this.ui.cancel() : this.game.hud.backCard()),
+      start: () => this.ui.top?.id === 'pause' && this.ui.cancel(),
+    });
+    this.game.hud.hintAdapter = (t) => adaptHint(t, input.lastDevice, input.gamepad.kind);
     this.game.hud.bindButtons({ onPause: () => this.pauseGame(), onRestart: () => this.game.restart() });
     // M toggles mute anywhere (except while typing / rebinding a key).
     window.addEventListener('keydown', (e) => {
@@ -56,9 +93,50 @@ export class App {
     this.game.applySettings(this.save.settings);
   }
 
+  /** Called whenever the player switches between keyboard / gamepad / touch. */
+  private deviceChanged(d: Device): void {
+    document.body.dataset.device = d;
+    this.refreshPrompts();
+  }
+
+  /** Footer button prompts + touch-control visibility (cheap; runs on events and a slow timer). */
+  private refreshPrompts(): void {
+    const input = this.game.input;
+    const d = input.lastDevice;
+    const k = input.gamepad.kind;
+    const b = this.save.settings.bindings;
+    const g = (x: Parameters<typeof glyph>[0]) => glyph(x, d, k, b);
+    const card = this.game.hud.completeOpen;
+    const menu = this.ui.isOpen;
+    let html = '';
+    if (d !== 'touch' && (menu || card)) {
+      if (card) html = `<span>${g('confirm')} Select</span><span>${g('restart')} Retry</span><span>${g('back')} Levels</span>`;
+      else if (this.ui.top?.id === 'pause') html = `<span>${g('move')} Navigate</span><span>${g('confirm')} Select</span><span>${g('back')} Resume</span>`;
+      else html = `<span>${g('move')} Navigate</span><span>${g('confirm')} Select</span><span>${g('back')} Back</span>`;
+    }
+    if (html !== this.promptHtml) {
+      this.promptHtml = html;
+      this.promptBar.innerHTML = html;
+    }
+    this.promptBar.classList.toggle('show', !!html);
+
+    // Touch controls: only while actually driving.
+    const s = this.save.settings;
+    const coarse = matchMedia('(pointer: coarse)').matches;
+    const want = s.touch === 'on' || (s.touch === 'auto' && (d === 'touch' || (coarse && d !== 'gamepad')));
+    const driving = this.game.mode === 'play' && !this.game.paused && !menu && !card;
+    this.touch.setVisible(want && driving);
+    this.touch.setBoost(!!this.game.data?.boost);
+    this.touch.setHaptics(!s.reducedMotion);
+  }
+  private promptHtml = '';
+
   boot(): void {
     this.applySettings();
     this.game.start();
+    this.pads.start();
+    setInterval(() => this.refreshPrompts(), 250);
+    document.body.dataset.device = this.game.input.lastDevice;
     // ?level=N jumps straight into a level (dev/testing, shareable links).
     const q = new URLSearchParams(location.search).get('level');
     if (q && hasLevel(Number(q))) {
@@ -123,7 +201,17 @@ export class App {
     this.ui.show('levels');
   }
 
+  /** Phones: go fullscreen + lock landscape on the first Play tap (needs a user gesture; failures are fine). */
+  private tryLandscape(): void {
+    if (this.game.input.lastDevice !== 'touch' || document.fullscreenElement) return;
+    void document.documentElement
+      .requestFullscreen?.()
+      .then(() => (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.('landscape'))
+      .catch(() => undefined);
+  }
+
   playLevel(id: number): void {
+    this.tryLandscape();
     this.ui.closeAll();
     this.save.data.lastLevel = id;
     this.game.startPlay(id);

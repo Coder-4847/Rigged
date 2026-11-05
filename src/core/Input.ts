@@ -15,6 +15,8 @@ export interface InputState {
   pause: boolean;
 }
 
+import { GamepadSource } from './Gamepad';
+
 export type Action = 'gas' | 'brake' | 'tiltUp' | 'tiltDown' | 'boost' | 'restart' | 'pause';
 
 export const DEFAULT_BINDINGS: Record<Action, string[]> = {
@@ -29,6 +31,8 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
 
 /** A device that contributes to the unified state each poll. */
 export interface InputSource {
+  /** Set by the manager: call when the player actively uses this device (drives glyph prompts). */
+  onActivity?: () => void;
   poll(out: InputState): void;
   /** Called after the frame consumed edge-triggered values. */
   endFrame?(): void;
@@ -38,15 +42,14 @@ class KeyboardSource implements InputSource {
   private down = new Set<string>();
   private pressed = new Set<string>();
   bindings: Record<Action, string[]> = structuredClone(DEFAULT_BINDINGS);
-  /** Fires on any key press (used for last-input-device tracking + audio unlock). */
-  onAnyKey?: () => void;
+  onActivity?: () => void;
 
   constructor() {
     window.addEventListener('keydown', (e) => {
+      this.onActivity?.();
       if (e.repeat) return;
       this.down.add(e.code);
       this.pressed.add(e.code);
-      this.onAnyKey?.();
       // Stop arrows/space from scrolling the page.
       if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
     });
@@ -80,18 +83,34 @@ class KeyboardSource implements InputSource {
   }
 }
 
+export type Device = 'keyboard' | 'gamepad' | 'touch';
+
 export class InputManager {
   readonly keyboard = new KeyboardSource();
-  private sources: InputSource[] = [this.keyboard];
+  readonly gamepad = new GamepadSource();
+  private sources: InputSource[] = [];
   readonly state: InputState = InputManager.blank();
   /** Last device the player used; drives on-screen glyph prompts. */
-  lastDevice: 'keyboard' | 'gamepad' | 'touch' = 'keyboard';
+  lastDevice: Device = 'keyboard';
+  onDeviceChange?: (d: Device) => void;
+
+  constructor() {
+    this.addSource(this.keyboard, 'keyboard');
+    this.addSource(this.gamepad, 'gamepad');
+  }
+
+  setDevice(d: Device): void {
+    if (d === this.lastDevice) return;
+    this.lastDevice = d;
+    this.onDeviceChange?.(d);
+  }
 
   private static blank(): InputState {
     return { throttle: 0, brake: 0, tilt: 0, boost: false, restart: false, pause: false };
   }
 
-  addSource(s: InputSource): void {
+  addSource(s: InputSource, device: Device): void {
+    s.onActivity = () => this.setDevice(device);
     this.sources.push(s);
   }
 

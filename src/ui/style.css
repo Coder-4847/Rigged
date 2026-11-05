@@ -14,7 +14,9 @@ html, body {
 }
 #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #ui { position: fixed; inset: 0; pointer-events: none; }
-#ui > * { pointer-events: auto; }
+/* Children opt IN to pointer events (menus when open, the complete card, touch buttons, HUD buttons). */
+#ui > * { pointer-events: none; }
+#ui > .screens.open, #ui > .complete { pointer-events: auto; }
 
 /* Screen wipe used for crash/respawn and screen transitions. */
 .wipe {
@@ -93,7 +95,7 @@ html, body {
 @keyframes screen-in { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
 
 .toast {
-  position: fixed; left: 50%; bottom: max(22px, env(safe-area-inset-bottom)); transform: translate(-50%, 30px); opacity: 0; z-index: 60;
+  position: fixed; left: 50%; bottom: max(76px, env(safe-area-inset-bottom)); transform: translate(-50%, 30px); opacity: 0; z-index: 60;
   background: rgba(15,24,34,.92); padding: 10px 18px; border-radius: 14px; font-weight: 800; transition: transform .3s, opacity .3s; pointer-events: none;
   box-shadow: 0 4px 0 rgba(0,0,0,.3);
 }
@@ -211,3 +213,45 @@ label.setting .lab { width: 92px; flex: none; }
   .card.pause, .card.credits { padding: 16px; gap: 8px; } .foot { display: none; }
   .settings .cols { padding: 14px; gap: 18px; }
 }
+
+/* ------------------------------------------------------------------ glyph prompts */
+.prompts { position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translate(-50%, 20px); opacity: 0; display: flex; gap: 22px; z-index: 25; pointer-events: none; padding: 8px 18px; border-radius: 16px; background: rgba(12,20,30,.72); backdrop-filter: blur(6px); font-weight: 800; font-size: 14px; white-space: nowrap; transition: opacity .2s, transform .2s; }
+.prompts.show { opacity: 1; transform: translate(-50%, 0); }
+.prompts span { display: inline-flex; align-items: center; gap: 6px; }
+.glyph { display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 8px; font-size: 12px; font-weight: 900; line-height: 1; }
+.glyph.key { background: #e9e4d8; color: #1d2530; box-shadow: 0 3px 0 #9d978a; }
+.glyph.pad { background: #3a4d66; color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.35); }
+.glyph.pad.xb, .glyph.pad.ps { border-radius: 50%; width: 26px; padding: 0; font-size: 14px; }
+.glyph.xb.a { background: #4cae4f; } .glyph.xb.b { background: #d94a3a; } .glyph.xb.x { background: #3b82f6; } .glyph.xb.y { background: #f2b61e; color: #2a1d00; }
+.glyph.ps { background: #2c3a52; } .glyph.ps.cross { color: #7aa7ff; } .glyph.ps.circle { color: #ff6b7a; } .glyph.ps.square { color: #ff9ae0; } .glyph.ps.triangle { color: #5be0b4; }
+body[data-device="touch"] .foot { display: none; }
+
+/* focus ring follows the last device (keyboard / gamepad get a ring; mouse / touch don't) */
+body[data-device="keyboard"] [data-nav]:focus, body[data-device="gamepad"] [data-nav]:focus { outline: 4px solid #fff; outline-offset: 3px; }
+body[data-device="touch"] [data-nav]:focus { outline: none; }
+
+/* ------------------------------------------------------------------ touch controls */
+.touch { position: fixed; inset: 0; z-index: 15; pointer-events: none; touch-action: none; }
+.touch.hidden { display: none; }
+.touch .left, .touch .right { position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); display: grid; gap: 12px; align-items: end; }
+.touch .left { left: max(16px, env(safe-area-inset-left)); justify-items: start; }
+.touch .right { right: max(16px, env(safe-area-inset-right)); justify-items: end; }
+.touch .tilts { display: flex; gap: 12px; }
+.tbtn { pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; display: grid; place-items: center; font-weight: 1000; letter-spacing: .06em; color: #fff; border-radius: 26px; background: rgba(18,28,42,.5); backdrop-filter: blur(5px); box-shadow: 0 5px 0 rgba(0,0,0,.3), inset 0 0 0 3px rgba(255,255,255,.22); transition: transform .06s, background .06s; }
+.tbtn.on { transform: translateY(4px) scale(.96); background: var(--accent); color: #1a1205; box-shadow: 0 1px 0 rgba(0,0,0,.3), inset 0 0 0 3px rgba(255,255,255,.4); }
+.tbtn.gas, .tbtn.brake { width: clamp(110px, 26vh, 170px); height: clamp(84px, 20vh, 128px); font-size: clamp(16px, 3.4vh, 24px); }
+.tbtn.gas { background: rgba(255,181,46,.45); }
+.tbtn.tilt { width: clamp(64px, 15vh, 92px); height: clamp(58px, 13vh, 80px); font-size: clamp(24px, 5vh, 36px); }
+.tbtn.boost { width: clamp(80px, 17vh, 110px); height: clamp(48px, 10vh, 64px); font-size: 14px; border-radius: 18px; }
+body.touch-on .hud-btn { width: 50px; height: 50px; font-size: 18px; }
+body.touch-on .hud-btn[data-pause] { position: fixed; right: max(14px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); }
+body.touch-on .hud-top > .pill { margin-right: 66px; }
+body.touch-on .hud-bottom { bottom: auto; top: 64px; }
+
+/* portrait phones: ask for landscape */
+.rotate-prompt { display: none; position: fixed; inset: 0; z-index: 100; place-items: center; text-align: center; background: #0f1822; font-weight: 900; font-size: 22px; }
+.rotate-prompt small { display: block; opacity: .7; margin-top: 6px; font-size: 14px; }
+.big-ico { font-size: 64px; animation: tilt-phone 1.8s ease-in-out infinite; }
+@keyframes tilt-phone { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+@media (pointer: coarse) and (orientation: portrait) { .rotate-prompt { display: grid; } }
+.padstatus { margin-top: 6px; font-weight: 800; font-size: 13px; opacity: .75; }
