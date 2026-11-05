@@ -2,31 +2,77 @@
 
 Side-scrolling physics driving obstacle game for the browser (Vite + TypeScript, Planck.js physics, Three.js rendering).
 
+## Play
+
+**https://coder-4847.github.io/Rigged/** (deployed automatically by GitHub Actions, see [Deploying](#deploying)).
+
 ## Run
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm run build      # production build into dist/
-npx tsx scripts/simulate.ts   # headless physics sim used for tuning
+npm run build      # typecheck + production build into dist/
+npm run preview    # serve the production build
+npm test           # headless feel, hazard, save, unlock, input, music, level validation + bot smoke tests
+npm run test:full  # test + every vehicle over every level
 ```
 
-## Controls (current)
+Dev URL flags: `?level=N` jumps straight into a level (skips the landing page), `?play` skips the landing page,
+`?dev` enables `[` / `]` level skipping and the debug keys in production builds.
 
-| Action | Keys |
-| --- | --- |
-| Gas / brake-reverse | Right / Left (D / A) |
-| Air tilt | Up / Down (W / S) |
-| Restart | R |
-| Dev: physics wireframe / slow-mo / stats | F1 / F2 / F3 |
+## Controls
+
+| Action | Keyboard | Gamepad | Touch |
+| --- | --- | --- | --- |
+| Gas | → / D | RT | GAS (bottom right) |
+| Brake / reverse | ← / A | LT | BRAKE (bottom left) |
+| Air tilt (nose up / down) | ↑ / ↓ (W / S) | left stick, LB / RB, D-pad | tilt pair above BRAKE |
+| Boost / handbrake | Space | A | BOOST (when a level allows) |
+| Restart | R | Y / Select | top-left button |
+| Pause | Esc / P | Start | top-right button |
+| Menus | arrows / WASD, Enter, Esc | D-pad / stick, A, B | tap |
+| Mute | M | | |
+
+Keyboard keys can be remapped in Settings. Debug (dev only): F1 physics wireframe, F2 slow-mo, F3 stats.
+
+## Deploying
+
+`.github/workflows/deploy.yml` typechecks, validates all levels and music data, builds and publishes `dist/` to GitHub
+Pages on every push to the default branch (and on manual *Run workflow*). One-time setup: repo **Settings → Pages →
+Source: GitHub Actions**. The Vite `base` is `./`, so the build works under `/<repo>/` without further configuration.
 
 ## Authoring levels
 
-1. Add/modify a level function in `src/levels/author/worldNN.ts` (see `world01.ts` for examples).
-2. `npm run levels` regenerates the JSON (it also runs the bot to snap star 0/1 onto a proven line:
-   star 0 sits on the path, star 1 is lifted off it, star 2 is the hidden one).
-3. `npm run validate` checks structure/geometry; `npm run smoke` runs a driving bot through every level.
-4. Dev URL flags: `?level=N` jumps to a level, `?dev` enables `[` / `]` level skipping in production builds.
+Levels are TypeScript at authoring time and JSON at runtime (`src/levels/worldNN/levelNN.json`, one file each,
+loaded through `src/levels/registry.ts`).
+
+1. **Pick a module.** Worlds 2–10 use the *segment kit* (`src/levels/author/kit.ts`): a level is a list of proven
+   pieces, so it is fair by construction.
+
+   ```ts
+   mk(14, 'Rickety Bridge', 'Bridges collapse behind you — keep moving', (c) => {
+     K.bridge(c, 22);          // piece: a collapsing bridge
+     K.rolling(c, 2, 3.5, 24); // piece: two rolling hills
+     K.cp(c);                  // checkpoint
+     K.jump(c, 'S');           // ramp + gap + landing ('S' | 'M' | 'L' | 'XL', sizes are tuned)
+   }, 'hill')                  // what the hidden star sits on: 'flat' | 'hill' | 'dip'
+   ```
+
+   Terrain pieces: `run`, `rolling`, `bumps`, `jump`, `downhill`, `uphill`, `valley`, `ice`, `zone` (sand / snow / goo).
+   Hazard pieces: `crushers`, `sideCrusher`, `laser` (pulse / sweep / spin), `switchLaser`, `mirrorLaser`, `turret`, `door`,
+   `spikes`, `saw`, `swing`, `gears`, `platformGap`, `tiltGap`, `conveyor`, `boost`, `bounce`, `crumbles`, `bridge` …
+   World 1 (and anything bespoke) uses the lower-level `LevelBuilder` (`ground`, `spawnAt`, `finishAt`, `starAt`, `sign`,
+   `scatter`, `seesaw`, …) — see `world01.ts`.
+2. **Register it.** Add the level to its world array (levels are numbered 1–100, ten per world). Vehicle-forced
+   levels go in `FORCED_VEHICLES` in `author/index.ts`; level flags (`dark`, `gravity`, `boost`, `manual`) are `makeLevel` options.
+3. **Regenerate and test.**
+   - `npm run check -- <levelId…>` (or `--world N`) bot-tests levels straight from the authoring code.
+   - `npm run levels` regenerates the JSON: it runs the bot to snap stars onto a proven line and to set par time
+     (clean run × 1.2).
+   - `npm run validate` checks structure and geometry; `npm run smoke` drives every level; `npm run vehicles` does it per vehicle.
+4. **Rules of thumb** (the kit enforces most of them): flat run-up before anything dangerous; telegraph every hazard
+   (warning lamp, shake, pre-beam, ground ring); at most one timed hazard cluster between checkpoints; rhythm hazards
+   use `period`/`phase` synced to a ~16 m/s cruise; hazards are shape-coded, never colour-only.
 
 ## Tuning / tests
 
