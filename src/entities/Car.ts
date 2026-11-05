@@ -48,10 +48,14 @@ export class Car implements ContactOwner {
   events: CarEvents = {};
   /** Highest recent landing impact (for fx); reset by consumer. */
   lastLanding = 0;
+  /** Duration of the airtime that just ended (valid when lastLanding > 0). */
+  lastAirTime = 0;
   /** Chassis angular acceleration estimate -> visual lean. */
   accel = 0;
   private prevVx = 0;
   private bodyContacts = 0;
+  /** Seconds before another landing impact may be reported (debounces bounces). */
+  private impactCooldown = 0;
 
   constructor(
     private pw: PhysicsWorld,
@@ -174,8 +178,9 @@ export class Car implements ContactOwner {
     if (self.kind !== 'wheel' && self.kind !== 'chassis') return;
     // Normal impulse -> approximate velocity change of the whole car.
     const dv = impulse / this.mass;
-    if (dv > CONFIG.fx.landingMin && this.sinceLanded > 0.12) {
+    if (dv > CONFIG.fx.landingMin && this.impactCooldown <= 0) {
       this.lastLanding = Math.max(this.lastLanding, dv);
+      this.impactCooldown = 0.15;
       this.events.onLand?.(dv, self.index ?? -1);
     }
   }
@@ -186,8 +191,7 @@ export class Car implements ContactOwner {
     if (this.crashed) return;
     this.crashed = true;
     this.crashReason = reason;
-    // Motors off; physics just plays out until the debris takes over.
-    for (const j of this.joints) j.enableMotor(false);
+    // NB: may be called from inside a contact callback — flags only, no structural changes.
     this.events.onCrash?.(reason);
   }
 
@@ -196,6 +200,7 @@ export class Car implements ContactOwner {
     if (this.crashed) return;
     const def = this.def;
     const ch = this.chassis;
+    this.impactCooldown -= dt;
     const angle = ch.getAngle();
     const vel = ch.getLinearVelocity();
     const cos = Math.cos(angle);
@@ -206,7 +211,10 @@ export class Car implements ContactOwner {
     const wasGrounded = this.grounded;
     this.grounded = this.wheelContacts[0] > 0 || this.wheelContacts[1] > 0;
     if (this.grounded) {
-      if (!wasGrounded) this.sinceLanded = 0;
+      if (!wasGrounded) {
+        this.sinceLanded = 0;
+        this.lastAirTime = this.airTime;
+      }
       this.sinceLanded += dt;
       this.airTime = 0;
       this.sinceGrounded = 0;
@@ -314,6 +322,11 @@ export class Car implements ContactOwner {
     // Acceleration estimate for visual lean
     this.accel += ((vel.x - this.prevVx) / dt - this.accel) * Math.min(1, dt * 8);
     this.prevVx = vel.x;
+  }
+
+  /** True while the chassis body is touching solid ground (scraping). */
+  get scraping(): boolean {
+    return this.bodyContacts > 0;
   }
 
   get x(): number {

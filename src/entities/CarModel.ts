@@ -1,0 +1,340 @@
+import * as THREE from 'three';
+import { VehicleDef } from '../config';
+import { block, profile, tireGeometry } from '../render/geometry';
+
+/** A detachable piece of the car (becomes a physics debris body on crash). */
+export interface CarPart {
+  obj: THREE.Object3D;
+  /** Centre in chassis-local space (metres), and Z offset. */
+  x: number;
+  y: number;
+  z: number;
+  /** Half extents for the debris collider (boxes) or radius (wheels). */
+  hx: number;
+  hy: number;
+  radius?: number;
+  /** Extra spin flavour. */
+  isHead?: boolean;
+}
+
+const MAT = {
+  dark: new THREE.MeshStandardMaterial({ color: 0x232830, roughness: 0.7, vertexColors: true }),
+  chrome: new THREE.MeshStandardMaterial({ color: 0xcfd6dc, roughness: 0.25, metalness: 0.7, vertexColors: true }),
+  glass: new THREE.MeshStandardMaterial({ color: 0x7cc4e8, roughness: 0.12, metalness: 0.35, vertexColors: true }),
+  rubber: new THREE.MeshStandardMaterial({ color: 0x1b1e23, roughness: 0.95 }),
+  rim: new THREE.MeshStandardMaterial({ color: 0xdfe4e8, roughness: 0.3, metalness: 0.6 }),
+  skin: new THREE.MeshStandardMaterial({ color: 0xf2c9a0, roughness: 0.8, vertexColors: true }),
+  cap: new THREE.MeshStandardMaterial({ color: 0x2b6cb0, roughness: 0.7, vertexColors: true }),
+};
+
+/** Shared (static) geometries per vehicle shape would go here; the hatch builds its own. */
+export class CarModel {
+  /** Everything for the body (chassis transform applied here). */
+  readonly body = new THREE.Group();
+  /** Squash/stretch pivot at the chassis bottom. */
+  private readonly squashPivot = new THREE.Group();
+  private readonly inner = new THREE.Group();
+  /** Top-level group, parented to the scene. Wheels live here in world space. */
+  readonly root = new THREE.Group();
+  readonly parts: CarPart[] = [];
+  readonly wheelGroups: THREE.Group[] = []; // [rearL, rearR, frontL, frontR] visual wheels
+  private arms: THREE.Mesh[] = [];
+  readonly paint: THREE.MeshStandardMaterial;
+  private tailMat: THREE.MeshStandardMaterial;
+  private headMat: THREE.MeshStandardMaterial;
+  private headSpot?: THREE.SpotLight;
+  private headBeams: THREE.Mesh[] = [];
+  private driver!: THREE.Object3D;
+
+  // visual dynamics
+  private squash = 0;
+  private squashV = 0;
+  private lean = 0;
+  private bottom: number;
+  private halfZ = 0.85;
+  private wheelZ: number;
+  private hubLocal = new THREE.Vector3();
+
+  constructor(readonly def: VehicleDef, color = def.color) {
+    this.paint = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.08, vertexColors: true });
+    this.tailMat = new THREE.MeshStandardMaterial({ color: 0x7a1010, emissive: 0xff2a1a, emissiveIntensity: 0.5, roughness: 0.4 });
+    this.headMat = new THREE.MeshStandardMaterial({ color: 0xfff2c4, emissive: 0xffe9a6, emissiveIntensity: 0.9, roughness: 0.3 });
+    this.bottom = def.body.cy - def.body.hy;
+    this.wheelZ = this.halfZ + 0.22;
+
+    this.squashPivot.position.y = this.bottom;
+    this.inner.position.y = -this.bottom;
+    this.body.add(this.squashPivot);
+    this.squashPivot.add(this.inner);
+    this.root.add(this.body);
+
+    this.buildBody();
+    this.buildWheels();
+  }
+
+  // ------------------------------------------------------------------ building
+
+  private part(
+    mesh: THREE.Object3D,
+    x: number,
+    y: number,
+    z: number,
+    hx: number,
+    hy: number,
+    opts: Partial<CarPart> = {},
+  ): THREE.Object3D {
+    mesh.position.set(x, y, z);
+    mesh.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
+    });
+    this.inner.add(mesh);
+    this.parts.push({ obj: mesh, x, y, z, hx, hy, ...opts });
+    return mesh;
+  }
+
+  private mesh(geo: THREE.BufferGeometry, mat: THREE.Material): THREE.Mesh {
+    return new THREE.Mesh(geo, mat);
+  }
+
+  private buildBody(): void {
+    const d = this.def;
+    const hz = this.halfZ;
+    const bw = hz * 2;
+
+    // Lower chassis slab.
+    this.part(this.mesh(block(d.body.hx * 2, d.body.hy * 2, bw, 0.12), this.paint), 0, d.body.cy, 0, d.body.hx, d.body.hy);
+
+    // Hood (slightly raised, sloped front) and rear hatch lip.
+    this.part(
+      this.mesh(
+        profile(
+          [
+            [-0.55, 0],
+            [0.55, 0],
+            [0.5, 0.1],
+            [-0.5, 0.22],
+          ],
+          bw * 0.96,
+          0.04,
+        ),
+        this.paint,
+      ),
+      d.body.hx - 0.62,
+      d.body.cy + d.body.hy + 0.0,
+      0,
+      0.55,
+      0.1,
+    );
+    this.part(this.mesh(block(0.5, 0.16, bw * 0.94, 0.05), this.paint), -d.body.hx + 0.3, d.body.cy + d.body.hy + 0.06, 0, 0.25, 0.08);
+
+    // Cabin: paint shell + glass greenhouse.
+    const cx = d.cabin.cx;
+    const cyb = d.cabin.cy - d.cabin.hy; // cabin bottom
+    const top = d.cabin.hy * 2;
+    const cabinPts: Array<[number, number]> = [
+      [-d.cabin.hx, 0],
+      [d.cabin.hx + 0.02, 0],
+      [d.cabin.hx - 0.42, top],
+      [-d.cabin.hx + 0.12, top],
+    ];
+    this.part(this.mesh(profile(cabinPts, bw * 0.84, 0.05), this.paint), cx, cyb, 0, d.cabin.hx, d.cabin.hy);
+    // Glass: inset profile, wider than the shell so it shows on both sides.
+    const m = 0.1;
+    const glassPts: Array<[number, number]> = [
+      [-d.cabin.hx + m + 0.02, 0.07],
+      [d.cabin.hx - m + 0.06, 0.07],
+      [d.cabin.hx - 0.42 - m * 0.2, top - 0.1],
+      [-d.cabin.hx + 0.12 + m * 0.4, top - 0.1],
+    ];
+    this.part(this.mesh(profile(glassPts, bw * 0.84 + 0.04, 0.02, 0.9), MAT.glass), cx, cyb, 0, d.cabin.hx * 0.9, d.cabin.hy * 0.8);
+
+    // Driver (cartoon head with cap) visible through the glass.
+    const head = new THREE.Group();
+    head.add(this.mesh(block(0.38, 0.38, 0.38, 0.1, 0.9), MAT.skin));
+    const cap = this.mesh(block(0.42, 0.14, 0.42, 0.05, 0.9), MAT.cap);
+    cap.position.y = 0.2;
+    const brim = this.mesh(block(0.22, 0.05, 0.38, 0.02, 0.9), MAT.cap);
+    brim.position.set(0.28, 0.14, 0);
+    head.add(cap, brim);
+    this.driver = this.part(head, cx + 0.05, cyb + 0.3, 0.12, 0.2, 0.2, { isHead: true });
+
+    // Bumpers.
+    this.part(this.mesh(block(0.2, 0.24, bw * 1.02, 0.07), MAT.dark), d.body.hx + 0.04, d.body.cy - 0.15, 0, 0.1, 0.12);
+    this.part(this.mesh(block(0.2, 0.24, bw * 1.02, 0.07), MAT.dark), -d.body.hx - 0.04, d.body.cy - 0.15, 0, 0.1, 0.12);
+
+    // Headlights + taillights (emissive).
+    for (const s of [-1, 1]) {
+      this.part(this.mesh(block(0.1, 0.2, 0.3, 0.04, 1), this.headMat), d.body.hx + 0.02, d.body.cy + 0.08, s * 0.55, 0.05, 0.1);
+      this.part(this.mesh(block(0.1, 0.18, 0.3, 0.04, 1), this.tailMat), -d.body.hx - 0.01, d.body.cy + 0.08, s * 0.55, 0.05, 0.09);
+    }
+
+    // Spoiler on posts.
+    const spoiler = new THREE.Group();
+    spoiler.add(this.mesh(block(0.5, 0.07, bw * 0.92, 0.03, 0.9), MAT.dark));
+    for (const s of [-1, 1]) {
+      const post = this.mesh(block(0.07, 0.2, 0.07, 0.02, 0.9), MAT.dark);
+      post.position.set(0.05, -0.12, s * 0.5);
+      spoiler.add(post);
+    }
+    this.part(spoiler, -d.body.hx + 0.2, d.body.cy + d.body.hy + 0.38, 0, 0.25, 0.12);
+
+    // Wheel arch liners (dark discs behind the wheels) + suspension arms live on the body but
+    // are not separate debris.
+    for (const lx of [d.wheel.rearX, d.wheel.frontX]) {
+      for (const s of [-1, 1]) {
+        const arch = this.mesh(block(d.wheel.radius * 2.15, d.wheel.radius * 1.4, 0.05, 0.02, 1), MAT.dark);
+        arch.position.set(lx, d.body.cy - 0.02, s * (hz + 0.005));
+        this.inner.add(arch);
+      }
+    }
+    for (let i = 0; i < 4; i++) {
+      const arm = this.mesh(block(0.09, 1, 0.09, 0.03, 1), MAT.chrome);
+      this.inner.add(arm);
+      this.arms.push(arm);
+    }
+  }
+
+  private buildWheels(): void {
+    const r = this.def.wheel.radius;
+    const tireW = 0.46;
+    const tire = tireGeometry(r, tireW);
+    const rimGeo = new THREE.CylinderGeometry(r * 0.62, r * 0.62, tireW + 0.02, 18).rotateX(Math.PI / 2);
+    const hubGeo = new THREE.CylinderGeometry(r * 0.16, r * 0.16, tireW + 0.08, 10).rotateX(Math.PI / 2);
+    const spokeGeo = block(r * 1.15, r * 0.14, tireW + 0.04, 0.02, 1);
+    const treadGeo = block(0.1, r * 0.12, tireW * 0.86, 0.02, 1);
+    const treads = 12;
+
+    for (let i = 0; i < 4; i++) {
+      const g = new THREE.Group();
+      g.add(this.mesh(tire, MAT.rubber));
+      g.add(this.mesh(rimGeo, MAT.rim));
+      g.add(this.mesh(hubGeo, MAT.chrome));
+      for (let s = 0; s < 3; s++) {
+        const sp = this.mesh(spokeGeo, MAT.dark);
+        sp.rotation.z = (s * Math.PI) / 3;
+        g.add(sp);
+      }
+      for (let k = 0; k < treads; k++) {
+        const t = this.mesh(treadGeo, MAT.dark);
+        const a = (k / treads) * Math.PI * 2;
+        t.position.set(Math.cos(a) * (r + 0.01), Math.sin(a) * (r + 0.01), 0);
+        t.rotation.z = a;
+        g.add(t);
+      }
+      g.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) {
+          m.castShadow = true;
+          m.receiveShadow = true;
+        }
+      });
+      this.root.add(g);
+      this.wheelGroups.push(g);
+    }
+  }
+
+  // ------------------------------------------------------------------ per-frame
+
+  /**
+   * Apply interpolated physics transforms. Chassis/wheel poses are world-space.
+   */
+  update(
+    dt: number,
+    chassis: { x: number; y: number; a: number },
+    wheels: Array<{ x: number; y: number; a: number }>,
+    accel: number,
+    braking: boolean,
+  ): void {
+    // Spring-damper squash (visual only).
+    this.squashV += (-this.squash * 220 - this.squashV * 14) * dt;
+    this.squash += this.squashV * dt;
+    const sq = THREE.MathUtils.clamp(this.squash, -0.35, 0.35);
+    // Lean: nose lifts under acceleration, dips under braking.
+    const leanT = THREE.MathUtils.clamp(accel * 0.0032, -0.07, 0.07);
+    this.lean += (leanT - this.lean) * Math.min(1, dt * 9);
+
+    this.body.position.set(chassis.x, chassis.y, 0);
+    this.body.rotation.z = chassis.a;
+    this.squashPivot.scale.set(1 + sq * 0.45, 1 - sq, 1 + sq * 0.2);
+    this.inner.rotation.z = this.lean;
+
+    this.tailMat.emissiveIntensity = braking ? 2.2 : 0.5;
+
+    const d = this.def;
+    const ca = Math.cos(-chassis.a);
+    const sa = Math.sin(-chassis.a);
+    for (let i = 0; i < 4; i++) {
+      const src = wheels[i < 2 ? 0 : 1];
+      const side = i % 2 === 0 ? -1 : 1;
+      const g = this.wheelGroups[i];
+      g.position.set(src.x, src.y, side * this.wheelZ);
+      g.rotation.z = src.a;
+      // Suspension arm from the chassis mount to the wheel hub, in chassis space.
+      const dx = src.x - chassis.x;
+      const dy = src.y - chassis.y;
+      const lx = dx * ca - dy * sa;
+      const ly = dx * sa + dy * ca;
+      this.hubLocal.set(lx, ly, side * (this.halfZ - 0.1));
+      const ax = lx;
+      const ay = d.wheel.anchorY + 0.12;
+      const len = Math.max(0.05, ay - ly);
+      const arm = this.arms[i];
+      arm.position.set(ax, (ay + ly) / 2, this.hubLocal.z);
+      arm.scale.set(1, len, 1);
+    }
+  }
+
+  /** Kick the visual squash spring (landing impact in m/s). */
+  landed(impact: number): void {
+    this.squashV += Math.min(impact, 16) * 0.9;
+  }
+
+  /** Toggle headlight beams (dark levels). */
+  setHeadlights(on: boolean): void {
+    if (on && !this.headSpot) {
+      this.headSpot = new THREE.SpotLight(0xfff0c8, 90, 36, 0.5, 0.6, 1.2);
+      this.headSpot.position.set(this.def.body.hx, this.def.body.cy + 0.1, 0);
+      this.headSpot.target.position.set(this.def.body.hx + 10, this.def.body.cy - 1.2, 0);
+      this.body.add(this.headSpot, this.headSpot.target);
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xfff0c8,
+        transparent: true,
+        opacity: 0.1,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const cone = new THREE.ConeGeometry(1.6, 7, 14, 1, true);
+      cone.rotateZ(-Math.PI / 2);
+      cone.translate(3.5, 0, 0);
+      const beam = new THREE.Mesh(cone, beamMat);
+      beam.position.set(this.def.body.hx, this.def.body.cy + 0.1, 0);
+      beam.rotation.z = -0.1;
+      this.body.add(beam);
+      this.headBeams.push(beam);
+    }
+    if (this.headSpot) this.headSpot.visible = on;
+    for (const b of this.headBeams) b.visible = on;
+  }
+
+  /** Headlight/ taillight pulse while braking, plus the driver's head bob. */
+  bobDriver(t: number, speedFrac: number): void {
+    this.driver.rotation.z = Math.sin(t * 9) * 0.05 * (0.3 + speedFrac);
+  }
+
+  /** Remove from the scene graph (meshes/geometry are shared, so no dispose needed). */
+  dispose(): void {
+    this.root.removeFromParent();
+    this.headSpot?.dispose();
+  }
+
+  /** Current world transform of a part (chassis frame -> world), for exploding. */
+  partWorld(part: CarPart, chassis: { x: number; y: number; a: number }): { x: number; y: number; a: number } {
+    const c = Math.cos(chassis.a);
+    const s = Math.sin(chassis.a);
+    return { x: chassis.x + part.x * c - part.y * s, y: chassis.y + part.x * s + part.y * c, a: chassis.a };
+  }
+}
