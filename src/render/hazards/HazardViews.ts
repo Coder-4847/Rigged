@@ -551,6 +551,12 @@ function seesawSkip(): null {
 
 /** Create the view for a behavior, or null if it has none (seesaws are handled by LevelView). */
 export function makeHazardView(b: Behavior, v: ViewCtx): HazardView | null {
+  const hv = makeView(b, v);
+  if (hv && (b instanceof CrateBody || b instanceof Boulder || b instanceof Tnt || b instanceof Dominoes || b instanceof Falling || b instanceof CrumbleBlock || b instanceof Bridge)) hv.roams = true;
+  return hv;
+}
+
+function makeView(b: Behavior, v: ViewCtx): HazardView | null {
   if (b instanceof Zone) return zoneView(b, v);
   if (b instanceof Conveyor) return conveyorView(b, v);
   if (b instanceof BouncePad) return bounceView(b);

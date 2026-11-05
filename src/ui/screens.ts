@@ -242,7 +242,7 @@ export function settingsScreen(app: App): Screen {
     return h('label.setting', {}, h('span.lab', {}, label), input, val);
   };
 
-  const toggle = (label: string, key: 'muted' | 'shake' | 'reducedMotion' | 'rumble', hint = '') => {
+  const toggle = (label: string, key: 'muted' | 'shake' | 'reducedMotion' | 'rumble' | 'highContrast', hint = '') => {
     const b = h('button.btn.toggle', { 'data-nav': true, role: 'switch' });
     const paint = () => {
       b.textContent = s[key] ? 'On' : 'Off';
@@ -270,6 +270,18 @@ export function settingsScreen(app: App): Screen {
     paint();
     return h('div.setting', {}, h('span.lab', {}, label, hint && h('small', {}, hint)), b);
   };
+
+  const scaleOpts: Array<[number, string]> = [[0.85, 'Small'], [1, 'Normal'], [1.2, 'Large'], [1.4, 'Extra large']];
+  const scaleBtn = h('button.btn.toggle', { 'data-nav': true });
+  const paintScale = () => (scaleBtn.textContent = (scaleOpts.find((o) => o[0] === s.uiScale) ?? scaleOpts[1])[1]);
+  scaleBtn.addEventListener('click', () => {
+    const i = scaleOpts.findIndex((o) => o[0] === s.uiScale);
+    s.uiScale = scaleOpts[(i + 1) % scaleOpts.length][0];
+    paintScale();
+    commit();
+  });
+  paintScale();
+  const scaleChoice = h('div.setting', {}, h('span.lab', {}, 'Interface size', h('small', {}, 'Scales menus and HUD')), scaleBtn);
 
   // --- controls remap
   const rows = h('div.binds');
@@ -362,6 +374,8 @@ export function settingsScreen(app: App): Screen {
         choice('Graphics', 'quality', [['auto', 'Auto'], ['low', 'Low'], ['med', 'Medium'], ['high', 'High']], 'Auto drops quality if frames stay slow'),
         toggle('Camera shake', 'shake'),
         toggle('Reduced motion', 'reducedMotion', 'No shake, speed lines or slow-mo'),
+        toggle('High contrast', 'highContrast', 'Opaque panels, bold outlines'),
+        scaleChoice,
         choice('Touch controls', 'touch', [['auto', 'Auto'], ['on', 'Always'], ['off', 'Never']]),
         toggle('Controller rumble', 'rumble'),
         padStatus,

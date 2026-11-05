@@ -13,6 +13,10 @@ export interface Settings {
   reducedMotion: boolean;
   /** Controller vibration. */
   rumble: boolean;
+  /** UI size multiplier for HUD + menus. */
+  uiScale: number;
+  /** Stronger outlines, opaque panels, brighter hazards cues. */
+  highContrast: boolean;
   touch: 'auto' | 'on' | 'off';
   quality: QualityName | 'auto';
   bindings: Record<Action, string[]>;
@@ -57,6 +61,8 @@ function defaults(): SaveData {
       shake: true,
       reducedMotion: reduce,
       rumble: true,
+      uiScale: 1,
+      highContrast: typeof matchMedia !== 'undefined' && matchMedia('(prefers-contrast: more)').matches,
       touch: 'auto',
       quality: 'auto',
       bindings: structuredClone(DEFAULT_BINDINGS),

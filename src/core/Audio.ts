@@ -1,3 +1,6 @@
+import { Music } from './music/Music';
+import type { TrackId } from './music/tracks';
+
 /**
  * Fully procedural WebAudio: no asset files. Engine tone, impacts, crash, UI blips, chimes.
  * The AudioContext is created on the first user gesture (mobile autoplay policy) and is
@@ -22,6 +25,9 @@ export class AudioEngine {
   private whirGain?: GainNode;
   private whirFilter?: BiquadFilterNode;
 
+  private music?: Music;
+  private wantTrack: TrackId | null = null;
+  private wantMuffle = false;
   volumes = { master: 0.8, sfx: 1, music: 0.5 };
   muted = false;
 
@@ -53,6 +59,9 @@ export class AudioEngine {
       this.noise = this.makeNoise(c);
       this.applyVolumes();
       this.startEngine();
+      this.music = new Music(c, this.musicBus);
+      this.music.setMuffled(this.wantMuffle);
+      if (this.wantTrack !== null) this.music.play(this.wantTrack);
     }
     if (this.ctx.state === 'suspended' && !document.hidden) void this.ctx.resume();
   }
@@ -80,6 +89,23 @@ export class AudioEngine {
     this.master.gain.setTargetAtTime(this.muted ? 0 : this.volumes.master, t, 0.03);
     this.sfx.gain.setTargetAtTime(this.volumes.sfx, t, 0.03);
     this.musicBus.gain.setTargetAtTime(this.volumes.music, t, 0.03);
+  }
+
+  // ------------------------------------------------------------------ music
+
+  /** Start (or crossfade to) a track. Remembered until the AudioContext exists (first user gesture). */
+  playMusic(track: TrackId): void {
+    this.wantTrack = track;
+    this.music?.play(track);
+  }
+
+  muffleMusic(on: boolean): void {
+    this.wantMuffle = on;
+    this.music?.setMuffled(on);
+  }
+
+  duckMusic(seconds = 0.6, depth = 0.25): void {
+    this.music?.duck(seconds, depth);
   }
 
   // ------------------------------------------------------------------ engine

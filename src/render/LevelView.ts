@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { block } from './geometry';
 import { buildTerrainMesh } from './TerrainMesh';
 import { Background } from './Background';
-import { buildDeco } from './Scenery';
+import { buildDeco, isShared, mergeStatic } from './Scenery';
 import { FinishView, FlagView, StarView } from './Pickups';
 import type { LevelData } from '../levels/types';
 import { SURFACE_STYLE, type WorldTheme } from '../levels/themes';
@@ -54,6 +54,9 @@ class SeesawView {
 }
 
 /** All visuals for one level (terrain, scenery, pickups, background). Disposable. */
+/** Hazards whose resting span is further than this (m) from the camera are skipped. */
+const HAZARD_CULL = 55;
+
 export class LevelView {
   readonly root = new THREE.Group();
   readonly stars: StarView[] = [];
@@ -62,6 +65,7 @@ export class LevelView {
   readonly background: Background;
   private seesaws: SeesawView[] = [];
   private hazards: HazardView[] = [];
+  private hazardSpans: Array<[number, number]> = [];
   private time = 0;
 
   constructor(
@@ -70,6 +74,7 @@ export class LevelView {
     readonly theme: WorldTheme,
     physics: LevelPhysics,
   ) {
+    const statics: THREE.Object3D[] = [];
     for (const e of data.entities) {
       if (e.type === 'terrain') {
         const st = e.surface && e.surface !== 'grass' ? SURFACE_STYLE[e.surface] : undefined;
@@ -80,9 +85,12 @@ export class LevelView {
         const d = buildDeco(e.kind, theme, e.scale ?? 1, e.text);
         d.position.set(e.x, e.y, e.z ?? -6);
         if (e.kind !== 'sign') d.rotation.y = (e.x * 0.37) % 0.6;
-        this.root.add(d);
+        // signs carry their own texture; everything else is baked into merged meshes below
+        if (e.kind === 'sign') this.root.add(d);
+        else statics.push(d);
       }
     }
+    if (statics.length) this.root.add(mergeStatic(statics));
     for (const s of physics.seesaws) {
       const v = new SeesawView(s);
       this.seesaws.push(v);
@@ -94,6 +102,10 @@ export class LevelView {
       if (hv) {
         this.hazards.push(hv);
         this.root.add(hv.object);
+        // measure where it lives (after one zero-dt update so it sits in its start pose) for distance culling
+        hv.update(1, 0, 0);
+        const bb = new THREE.Box3().setFromObject(hv.object);
+        this.hazardSpans.push(bb.isEmpty() || hv.roams ? [-Infinity, Infinity] : [bb.min.x, bb.max.x]);
       }
     }
     data.stars.forEach((s, i) => {
@@ -118,7 +130,14 @@ export class LevelView {
   update(alpha: number, dt: number, camX: number, camY: number): void {
     this.time += dt;
     for (const s of this.seesaws) s.update(alpha);
-    for (const h of this.hazards) h.update(alpha, this.time, dt);
+    for (let i = 0; i < this.hazards.length; i++) {
+      // hazards far outside the view neither update nor draw (generous margin: movers swing/slide)
+      const [lo, hi] = this.hazardSpans[i];
+      const near = camX > lo - HAZARD_CULL && camX < hi + HAZARD_CULL;
+      const h = this.hazards[i];
+      if (h.object.visible !== near) h.object.visible = near;
+      if (near) h.update(alpha, this.time, dt);
+    }
     for (const s of this.stars) s.update(dt, this.time);
     for (const f of this.flags) f.update(dt, this.time);
     this.finish.update(this.time);
@@ -128,7 +147,7 @@ export class LevelView {
   dispose(): void {
     this.root.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh) m.geometry.dispose();
+      if (m.isMesh && !isShared(m.geometry)) m.geometry.dispose();
     });
     this.root.removeFromParent();
   }

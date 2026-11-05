@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { block } from './geometry';
 import type { DecoKind } from '../levels/types';
 import type { WorldTheme } from '../levels/themes';
@@ -15,8 +16,22 @@ function mat(color: number, rough = 0.85): THREE.MeshStandardMaterial {
 }
 const shade = (c: number, k: number) => new THREE.Color(c).multiplyScalar(k).getHex();
 
+/** Block geometries are shared between every deco of the same shape (never disposed per level). */
+const blockCache = new Map<string, THREE.BufferGeometry>();
+export const isShared = (g: THREE.BufferGeometry): boolean => g.userData.shared === true;
+function sharedBlock(w: number, h: number, d: number, r: number): THREE.BufferGeometry {
+  const k = `${w}|${h}|${d}|${r}`;
+  let g = blockCache.get(k);
+  if (!g) {
+    g = block(w, h, d, r);
+    g.userData.shared = true;
+    blockCache.set(k, g);
+  }
+  return g;
+}
+
 function mesh(w: number, h: number, d: number, color: number, r = 0.08): THREE.Mesh {
-  const m = new THREE.Mesh(block(w, h, d, r), mat(color));
+  const m = new THREE.Mesh(sharedBlock(w, h, d, r), mat(color));
   m.castShadow = true;
   m.receiveShadow = true;
   return m;
@@ -131,4 +146,37 @@ export function buildDeco(kind: DecoKind, theme: WorldTheme, scale: number, text
   }
   g.scale.setScalar(kind === 'sign' ? 1 : scale);
   return g;
+}
+
+
+/**
+ * Bake many static scenery pieces into a few meshes: grouped by material and by 40 m slice of
+ * the level (so frustum culling still works). Cuts hundreds of draw calls down to a handful.
+ */
+export function mergeStatic(items: THREE.Object3D[], slice = 40): THREE.Group {
+  const out = new THREE.Group();
+  const buckets = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[] }>();
+  for (const it of items) {
+    it.updateMatrixWorld(true);
+    const bucket = Math.floor(it.position.x / slice);
+    it.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const material = m.material as THREE.Material;
+      const key = `${material.uuid}|${bucket}`;
+      let b = buckets.get(key);
+      if (!b) buckets.set(key, (b = { mat: material, geos: [] }));
+      b.geos.push(m.geometry.clone().applyMatrix4(m.matrixWorld));
+    });
+  }
+  for (const b of buckets.values()) {
+    const merged = mergeGeometries(b.geos, false);
+    b.geos.forEach((g) => g.dispose());
+    if (!merged) continue;
+    const m = new THREE.Mesh(merged, b.mat);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    out.add(m);
+  }
+  return out;
 }

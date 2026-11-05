@@ -5,6 +5,8 @@ import { block } from '../geometry';
 export interface HazardView {
   object: THREE.Object3D;
   update(alpha: number, t: number, dt: number): void;
+  /** Loose physics props can end up anywhere, so they are never distance-culled. */
+  roams?: boolean;
 }
 
 export interface Palette {

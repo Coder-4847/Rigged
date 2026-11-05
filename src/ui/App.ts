@@ -30,7 +30,7 @@ export class App {
   constructor(canvas: HTMLCanvasElement, root: HTMLElement) {
     this.game = new Game(canvas, root);
     this.ui = new UI(root);
-    this.toastEl = h('div.toast');
+    this.toastEl = h('div.toast', { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' });
     root.appendChild(this.toastEl);
     this.promptBar = h('div.prompts');
     root.appendChild(this.promptBar);
@@ -92,7 +92,11 @@ export class App {
   }
 
   applySettings(): void {
-    this.game.applySettings(this.save.settings);
+    const st = this.save.settings;
+    document.documentElement.style.setProperty('--ui-scale', String(st.uiScale || 1));
+    document.body.classList.toggle('hc', !!st.highContrast);
+    document.body.classList.toggle('scaled', (st.uiScale || 1) !== 1);
+    this.game.applySettings(st);
     this.applyGarage();
   }
 

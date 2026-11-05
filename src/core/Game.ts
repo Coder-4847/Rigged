@@ -22,6 +22,7 @@ import type { LevelData } from '../levels/types';
 import { Vec2 } from 'planck';
 import { Hud } from '../ui/Hud';
 import { Autopilot } from './Autopilot';
+import type { TrackId } from './music/tracks';
 import { popcount, Settings } from './Save';
 import { Wipe } from '../ui/Wipe';
 
@@ -195,6 +196,7 @@ export class Game {
     this.cpScale = 1;
     this.curVehicle = data.vehicle ?? this.garage.vehicle;
     this.cpVehicle = this.curVehicle;
+    if (this.mode === 'play') this.audio.playMusic(data.world as TrackId);
     this.hud.setLevel(data.id, data.name, data.checkpoints.length, th.accent, data.vehicle ? `Vehicle: ${VEHICLES[data.vehicle].name}${data.hint ? ' · ' + data.hint : ''}` : data.hint);
     this.spawnCar();
   }
@@ -350,7 +352,10 @@ export class Game {
     }
     this.lastPos = { x: cp.x, y: cp.y };
     this.camRig.addShake(0.85);
-    if (this.mode === 'play') this.audio.crash();
+    if (this.mode === 'play') {
+      this.audio.crash();
+      this.audio.duckMusic(0.8, 0.3);
+    }
     this.audio.silenceEngine();
     this.buzz([40, 30, 60]);
     this.particles.burst(26, cp.x, cp.y, { speed: 9, up: 3, life: 0.7, size: 0.2, color: [0xffd34a, 0xff9a2e, 0xffffff], gravity: 1, drag: 0.4 });
@@ -423,7 +428,10 @@ export class Game {
     this.finishFx = 1.1;
     this.pending.forEach((s) => this.banked.add(s));
     this.pending.clear();
-    if (this.mode === 'play') this.audio.fanfare();
+    if (this.mode === 'play') {
+      this.audio.fanfare();
+      this.audio.duckMusic(2.4, 0.22);
+    }
     this.audio.silenceEngine();
     this.slowBeat = 0.45;
     this.camRig.addShake(0.25);
@@ -458,6 +466,8 @@ export class Game {
     this.loop.paused = document.hidden;
     this.audio.silenceEngine();
     this.audio.ambient(0, 0);
+    this.audio.muffleMusic(false);
+    this.audio.playMusic('menu');
     this.loadLevel(hasLevel(id) ? id : 1);
     this.hud.setVisible(false);
     this.camRig.snapTo({ x: this.data.spawn[0], y: this.data.spawn[1], vx: 0, vy: 0, speedFrac: 0 });
@@ -496,6 +506,7 @@ export class Game {
     if (this.paused) return;
     this.paused = true;
     this.loop.paused = true;
+    this.audio.muffleMusic(true);
     this.audio.silenceEngine();
     this.audio.ambient(0, 0);
   }
@@ -504,6 +515,7 @@ export class Game {
     if (!this.paused) return;
     this.paused = false;
     this.loop.paused = document.hidden;
+    this.audio.muffleMusic(false);
   }
 
   /** Apply user settings (called on boot and whenever they change). */

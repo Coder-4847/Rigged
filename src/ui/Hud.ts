@@ -96,10 +96,27 @@ export class Hud {
     this.deaths.textContent = `☠ ${n}`;
   }
   setStars(on: boolean[]): void {
-    this.stars.forEach((s, i) => s.classList.toggle('on', !!on[i]));
+    this.stars.forEach((s, i) => {
+      const was = s.classList.contains('on');
+      s.classList.toggle('on', !!on[i]);
+      if (on[i] && !was) {
+        s.classList.remove('pop');
+        void s.offsetWidth;
+        s.classList.add('pop');
+      }
+    });
   }
   setCheckpoints(reached: number): void {
-    [...this.pips.children].forEach((p, i) => p.classList.toggle('on', i < reached));
+    [...this.pips.children].forEach((p, i) => {
+      const was = p.classList.contains('on');
+      const now = i < reached;
+      p.classList.toggle('on', now);
+      if (now && !was) {
+        p.classList.remove('pop');
+        void (p as HTMLElement).offsetWidth;
+        p.classList.add('pop');
+      }
+    });
   }
 
   showHint(text: string, ms = 3000): void {
@@ -117,6 +134,8 @@ export class Hud {
     this.hideComplete();
     const el = document.createElement('div');
     el.className = 'complete';
+    el.setAttribute('role', 'alertdialog');
+    el.setAttribute('aria-label', `Level complete: ${info.name}. ${info.stars} of 3 stars, time ${fmtTime(info.time)}`);
     const medals = [
       ['Finish', true],
       ['Par time', info.time <= info.par],

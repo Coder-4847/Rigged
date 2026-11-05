@@ -134,6 +134,25 @@ Built phase by phase (see the master prompt).
   99/99, the buggy 98/99, the monster 94/99 (some tall-truck / swinging-ball combos are deliberately harder);
   the script requires 100% for the hatch and ≥90% for the rest. `npm run test:full` includes it.
 
+- **Phase 9 — Landing, audio, access, performance:**
+  - *Landing page* (`index.html`, `src/landing/`): animated 2D-canvas hero (parallax block hills, a toy car that follows
+    the ground), feature cards, a CSS-only "learn the rhythm" crusher/laser demo, controls for keyboard / gamepad / phone,
+    and a footer. It costs ~11 KB JS + 30 KB CSS; the game (~1.7 MB, ~460 KB gzip) is a lazy chunk fetched on Play
+    (prefetched on hover/focus and when the browser is idle). `?level=N` / `?play` skip the landing page.
+  - *Music* (`src/core/music/`): a generative, deterministic score per world (11 tracks incl. the menu) — pure data in
+    `tracks.ts` (tempo, key, scale, chord loop, bass/drum/pad/lead patterns), scheduled with WebAudio in `Music.ts`
+    (crossfade between tracks, muffled + low-passed while paused, ducked on crash/finish). `npm run music` checks
+    determinism, note range, loop length and density.
+  - *Accessibility*: interface size (Small → Extra large) and a high-contrast mode (opaque panels, bold outlines, yellow
+    focus ring; defaults from `prefers-contrast`), toasts are an ARIA live region, the level-complete card is an
+    `alertdialog`, reduced motion (also from `prefers-reduced-motion`) disables shake, pops and slow-mo. Hazards were already
+    shape-coded (stripes, spikes, triangle signs) so none relies on colour alone. Full keyboard / gamepad menu navigation
+    and key remapping were done in earlier phases.
+  - *Animation*: checkpoint pips and stars "pop" on collect, page transitions slide, the play button pulses.
+  - *Performance*: static scenery is merged into a few meshes per material per 40 m slice (frustum culling still works),
+    block geometry is shared, hazard views that are > 55 m from the camera neither update nor draw (loose physics props
+    are exempt), and the game bundle is lazy-loaded.
+
 Design decisions (ambiguities resolved for fun/readability): brake doubles as reverse once stopped; gas+brake together
 is a handbrake; air tilt is a dedicated axis (Up = nose up).
 

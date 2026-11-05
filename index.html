@@ -2,14 +2,136 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#1b2a3a" />
-  <title>RIGGED</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#16222e" />
+  <title>RIGGED — a physics driving game</title>
+  <meta name="description" content="RIGGED: drive a blocky car through 100 hand-built physics obstacle courses. Crushers, lasers, lava, zero-G. Keyboard, gamepad and touch. Free, in your browser." />
+  <meta property="og:title" content="RIGGED — a physics driving game" />
+  <meta property="og:description" content="100 levels, 10 worlds, crushers and lasers. Drive. Don’t flip. One more try." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2316222e'/%3E%3Crect x='8' y='30' width='48' height='16' rx='5' fill='%23e8553a'/%3E%3Crect x='20' y='18' width='24' height='14' rx='4' fill='%237cc4e8'/%3E%3Ccircle cx='20' cy='48' r='8' fill='%23232830'/%3E%3Ccircle cx='46' cy='48' r='8' fill='%23232830'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/src/ui/style.css" />
 </head>
-<body>
+<body class="landing-open">
   <canvas id="game"></canvas>
   <div id="ui"></div>
-  <script type="module" src="/src/main.ts"></script>
+
+  <!-- ======================================================== LANDING (no game code loaded until Play) -->
+  <div id="landing" role="document">
+    <a class="skip" href="#features">Skip to features</a>
+
+    <header class="hero">
+      <canvas id="hero-canvas" aria-hidden="true"></canvas>
+      <div class="hero-shade" aria-hidden="true"></div>
+      <div class="hero-inner">
+        <h1 class="logo" aria-label="RIGGED"><span style="--i:0">R</span><span style="--i:1">I</span><span style="--i:2">G</span><span style="--i:3">G</span><span style="--i:4">E</span><span style="--i:5">D</span></h1>
+        <p class="tag">Drive. Don’t flip. One more try.</p>
+        <p class="sub">A physics driving obstacle game with 100 hand-built levels — and it’s free, right here in your browser.</p>
+        <button id="play" class="play" type="button"><span class="play-label">Play</span><span class="play-bar" aria-hidden="true"></span></button>
+        <p class="hint" id="play-hint">Keyboard · Gamepad · Touch</p>
+      </div>
+      <a class="scroll-cue" href="#features" aria-label="Scroll to features"><span></span></a>
+    </header>
+
+    <main>
+      <section id="features" class="section">
+        <h2>Built for “just one more try”</h2>
+        <div class="cards">
+          <article class="card f-levels">
+            <div class="ico" aria-hidden="true"><b data-count="100">100</b></div>
+            <h3>100 levels</h3>
+            <p>Every level teaches or twists exactly one idea. Instant restarts, no loading screens between attempts.</p>
+          </article>
+          <article class="card f-worlds">
+            <div class="ico" aria-hidden="true">
+              <i style="--c:#6fae4a"></i><i style="--c:#e3b866"></i><i style="--c:#8fd0f0"></i><i style="--c:#8b9199"></i><i style="--c:#5cf2ff"></i>
+              <i style="--c:#c77dff"></i><i style="--c:#ff8fb1"></i><i style="--c:#ff8a3d"></i><i style="--c:#7affc8"></i><i style="--c:#ff5ad1"></i>
+            </div>
+            <h3>10 worlds</h3>
+            <p>Grasslands to Zero-G Station, each with its own palette, physics twist and boss gauntlet.</p>
+          </article>
+          <article class="card f-hazards">
+            <div class="ico" aria-hidden="true"><div class="mini-crush"><em></em><span></span></div></div>
+            <h3>Crushers &amp; lasers</h3>
+            <p>Pistons, beams, saws, geysers and lava — always telegraphed, so every death is your fault.</p>
+          </article>
+          <article class="card f-input">
+            <div class="ico" aria-hidden="true"><span>⌨</span><span>🎮</span><span>📱</span></div>
+            <h3>Play your way</h3>
+            <p>Keyboard, controller with rumble, or thumb-friendly touch controls. Remap everything.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section dark" aria-labelledby="show-h">
+        <h2 id="show-h">Learn the rhythm</h2>
+        <p class="lead">Every hazard warns you first. A lamp flashes before the slam; a charge line precedes the beam.</p>
+        <div class="showcase">
+          <figure class="demo demo-crusher" aria-label="Animated preview of a crusher slamming">
+            <div class="d-sky"></div>
+            <div class="d-ceiling"></div>
+            <div class="d-lamp"></div>
+            <div class="d-shaft"></div>
+            <div class="d-head"></div>
+            <div class="d-ground"></div>
+            <div class="d-car"><i></i><i></i></div>
+            <figcaption>Crusher — lamp flashes, then it slams</figcaption>
+          </figure>
+          <figure class="demo demo-laser" aria-label="Animated preview of a spinning laser">
+            <div class="d-sky"></div>
+            <div class="d-emitter"></div>
+            <div class="d-beam"></div>
+            <div class="d-ground"></div>
+            <div class="d-car"><i></i><i></i></div>
+            <figcaption>Laser — cross while it points away</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="controls" class="section" aria-labelledby="ctl-h">
+        <h2 id="ctl-h">Controls</h2>
+        <div class="controls">
+          <div class="ctl">
+            <h3>Keyboard</h3>
+            <div class="keys">
+              <kbd>→</kbd><span>gas</span><kbd>←</kbd><span>brake / reverse</span>
+              <kbd>↑</kbd><kbd>↓</kbd><span>tilt in the air</span>
+              <kbd>Space</kbd><span>boost</span><kbd>R</kbd><span>instant restart</span><kbd>Esc</kbd><span>pause</span>
+            </div>
+            <small>WASD works too. All keys can be remapped.</small>
+          </div>
+          <div class="ctl">
+            <h3>Gamepad</h3>
+            <svg viewBox="0 0 220 120" class="pad" role="img" aria-label="Gamepad layout">
+              <rect x="30" y="30" width="160" height="70" rx="30" fill="#2b3a50"/>
+              <rect x="42" y="14" width="40" height="14" rx="5" fill="#ffb52e"/><text x="62" y="25" font-size="9" text-anchor="middle" fill="#1a1205" font-weight="800">LT</text>
+              <rect x="138" y="14" width="40" height="14" rx="5" fill="#ffb52e"/><text x="158" y="25" font-size="9" text-anchor="middle" fill="#1a1205" font-weight="800">RT</text>
+              <circle cx="70" cy="62" r="13" fill="#3d5170"/><text x="70" y="94" font-size="8" text-anchor="middle" fill="#f3efe6" font-weight="700">tilt</text>
+              <circle cx="150" cy="70" r="5" fill="#4cae4f"/><circle cx="162" cy="58" r="5" fill="#f2b61e"/><circle cx="138" cy="58" r="5" fill="#3b82f6"/><circle cx="150" cy="46" r="5" fill="#d94a3a"/>
+            </svg>
+            <p class="padkeys"><b>RT</b> gas · <b>LT</b> brake · <b>stick</b> tilt · <b>Y</b> restart · <b>Start</b> pause</p>
+            <small>Rumble on crashes and landings.</small>
+          </div>
+          <div class="ctl">
+            <h3>Touch</h3>
+            <div class="phone" role="img" aria-label="Touch layout: brake and tilt on the left, gas on the right">
+              <i class="t-tilt"></i><i class="t-tilt b"></i><i class="t-brake">BRAKE</i><i class="t-gas">GAS</i><i class="t-pause">❚❚</i><i class="t-restart">⟲</i>
+            </div>
+            <small>Multi-touch. Best in landscape.</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="section cta">
+        <h2>Ready?</h2>
+        <button id="play2" class="play" type="button"><span class="play-label">Play now</span></button>
+      </section>
+    </main>
+
+    <footer>
+      <p><b>RIGGED</b> — inspired by Drive Mad (Fancade / Martin Magni). Built with Vite, TypeScript, Planck.js and Three.js. All art and sound are generated in code.</p>
+    </footer>
+  </div>
+
+  <script type="module" src="/src/landing/landing.ts"></script>
 </body>
 </html>
