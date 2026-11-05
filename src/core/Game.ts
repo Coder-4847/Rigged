@@ -535,7 +535,7 @@ export class Game {
     let input = this.input.poll();
     if (this.mode === 'attract') {
       // AI drives behind the menus; player input is ignored.
-      if (this.phase === 'playing' && this.car) this.pilot!.drive(this.car, dt, this.pilotInput);
+      if (this.phase === 'playing' && this.car) this.pilot!.drive(this.car, dt, this.pilotInput, this.levelPhys);
       else {
         this.pilotInput.throttle = 0;
         this.pilotInput.brake = 0.4;

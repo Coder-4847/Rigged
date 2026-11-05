@@ -4,6 +4,7 @@ import type { BouncePad, Cannon, Conveyor, OneWay, TransformPad, Zone } from '..
 import { HazardView, Palette, box, chevronTexture, glow, line, ribbon, std } from './hz';
 
 export interface ViewCtx {
+  world: number;
   pal: Palette;
   ground: (x: number) => number;
 }
@@ -43,11 +44,13 @@ export function zoneView(z: Zone, v: ViewCtx): HazardView {
   const h = d.h ?? 6;
   switch (d.kind) {
     case 'sand':
+    case 'snow':
     case 'goo': {
       const goo = d.kind === 'goo';
+      const snow = d.kind === 'snow';
       const mat = new THREE.MeshStandardMaterial({
-        color: goo ? 0xa05ae0 : 0xe0be6a,
-        roughness: goo ? 0.15 : 0.95,
+        color: goo ? 0xa05ae0 : snow ? 0xf6fcff : 0xe0be6a,
+        roughness: goo ? 0.15 : snow ? 0.8 : 0.95,
         metalness: goo ? 0.2 : 0,
         emissive: goo ? 0x4a1a8a : 0,
         emissiveIntensity: 0.6,
@@ -55,7 +58,7 @@ export function zoneView(z: Zone, v: ViewCtx): HazardView {
       const r = ribbon(d.x, d.x + d.w, goo ? 0.22 : 0.16, 0.6, v.ground, LANE + 0.2, mat);
       g.add(r);
       // little mounds / bubbles so it reads as a different material from far away
-      const dots = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: goo ? 0xd09cff : 0xc9a456, roughness: goo ? 0.2 : 1 }), Math.floor(d.w / 1.4));
+      const dots = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: goo ? 0xd09cff : snow ? 0xffffff : 0xc9a456, roughness: goo ? 0.2 : 1 }), Math.floor(d.w / 1.4));
       const mm = new THREE.Matrix4();
       for (let i = 0; i < dots.count; i++) {
         const x = d.x + (i + Math.random() * 0.8) * 1.4;
@@ -200,6 +203,7 @@ export function conveyorView(c: Conveyor, v: ViewCtx): HazardView {
 export function bounceView(b: BouncePad): HazardView {
   const g = new THREE.Group();
   const w = b.w;
+  if (b.d.vent) return ventView(b);
   const base = box(w, 0.35, 2.6, std(0x59616c, { metal: 0.4 }), 0.08);
   base.position.set(b.d.x, b.d.y + 0.17, 0);
   const plate = box(w - 0.3, 0.26, 2.5, std(0xff4fa3, { emissive: 0xaa1166, ei: 0.5 }), 0.08);
@@ -301,3 +305,39 @@ export function transformView(p: TransformPad): HazardView {
 }
 
 void line;
+
+/** Steam vent: dark grate with a constant wisp of steam that bursts when it fires. */
+function ventView(b: BouncePad): HazardView {
+  const g = new THREE.Group();
+  const grate = box(b.w, 0.3, 2.6, std(0x3a424d, { metal: 0.5 }), 0.06);
+  grate.position.set(b.d.x, b.d.y + 0.15, 0);
+  g.add(grate);
+  for (let i = 0; i < Math.floor(b.w / 0.7); i++) {
+    const slit = box(0.12, 0.05, 2.4, std(0xdfe4e8, { vc: false }), 0.01);
+    slit.position.set(b.d.x - b.w / 2 + 0.5 + i * 0.7, b.d.y + 0.32, 0);
+    g.add(slit);
+  }
+  const n = 14;
+  const puffs = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 }), n);
+  puffs.frustumCulled = false;
+  g.add(puffs);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  return {
+    object: g,
+    update: (_a, t) => {
+      for (let i = 0; i < n; i++) {
+        const k = (t * 0.9 + i / n) % 1;
+        const burst = 1 + b.squash * 3;
+        const sz = (0.25 + k * 0.7) * (0.8 + b.squash);
+        m.compose(
+          new THREE.Vector3(b.d.x + Math.sin(i * 12.9 + t) * 0.5 * k * burst, b.d.y + 0.4 + k * (2.2 + b.squash * 5), Math.sin(i * 7.1) * 0.8),
+          q.setFromEuler(new THREE.Euler(0, 0, i + t)),
+          new THREE.Vector3(sz * (1 - k * 0.5), sz * (1 - k * 0.5), sz),
+        );
+        puffs.setMatrixAt(i, m);
+      }
+      puffs.instanceMatrix.needsUpdate = true;
+    },
+  };
+}

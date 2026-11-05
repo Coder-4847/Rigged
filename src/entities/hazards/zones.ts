@@ -25,7 +25,7 @@ export class Zone implements Behavior {
     this.angle = d.angle ?? 0;
     this.strength =
       d.strength ??
-      { sand: 3, goo: 6.5, boost: 30, wind: 20, lowgrav: 0.3, flipgrav: -1, magnet: 70, vacuum: 55 }[d.kind];
+      { sand: 3, snow: 2.2, goo: 6.5, boost: 30, wind: 20, lowgrav: 0.3, flipgrav: -1, magnet: 70, vacuum: 55 }[d.kind];
     const h = d.h ?? 6;
     this.cx = d.kind === 'magnet' ? d.x : d.x + d.w / 2;
     this.cy = d.kind === 'magnet' ? d.y : d.y + h / 2;
@@ -53,6 +53,7 @@ export class Zone implements Behavior {
     const dy = Math.sin(this.angle);
     switch (d.kind) {
       case 'sand':
+      case 'snow':
       case 'goo':
         if (car.grounded) dragCar(car, s);
         break;

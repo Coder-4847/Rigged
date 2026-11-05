@@ -6,6 +6,7 @@ import type { Behavior, HazardEvent, LevelCtx } from './hazards/core';
 import { BouncePad, Cannon, Conveyor, OneWay, TransformPad, Zone } from './hazards/zones';
 import { Crusher, Door, Gear, MovingPlatform, Saw, Spikes, Swing, Tilt } from './hazards/movers';
 import { Laser, Mirror, Switch } from './hazards/beams';
+import { Geyser, Lava } from './hazards/lava';
 import { Boulder, Bridge, CrateBody, CrumbleBlock, Dominoes, Falling, Tnt } from './hazards/breakables';
 
 export type { Behavior, HazardEvent } from './hazards/core';
@@ -201,6 +202,12 @@ export class LevelPhysics implements LevelCtx {
         break;
       case 'dominoes':
         this.add(new Dominoes(this, e));
+        break;
+      case 'lava':
+        this.add(new Lava(this, e));
+        break;
+      case 'geyser':
+        this.add(new Geyser(this, e));
         break;
       case 'deco':
         break; // visual only

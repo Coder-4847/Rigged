@@ -88,7 +88,7 @@ export class LevelView {
       this.seesaws.push(v);
       this.root.add(v.group, v.fulcrum);
     }
-    const vctx = { pal: { hazard: theme.hazard, accent: theme.accent, metal: 0x6c7580 }, ground: physics.groundAt };
+    const vctx = { world: data.world, pal: { hazard: theme.hazard, accent: theme.accent, metal: 0x6c7580 }, ground: physics.groundAt };
     for (const b of physics.behaviors) {
       const hv = makeHazardView(b, vctx);
       if (hv) {

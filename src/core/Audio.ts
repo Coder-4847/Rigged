@@ -227,6 +227,18 @@ export class AudioEngine {
       case 'boulder':
         this.noiseBurst(t, 0.9, 0.4 * v, 'lowpass', 500, 100);
         break;
+      case 'geyser-warn':
+        this.noiseBurst(t, 0.8, 0.22 * v, 'lowpass', 500, 180);
+        for (let i = 0; i < 5; i++) this.tone(t + i * 0.16, 'sine', 90 + i * 12, 70, 0.1, 0.12 * v);
+        break;
+      case 'geyser':
+        this.noiseBurst(t, 0.7, 0.55 * v, 'bandpass', 700, 2600, 0.7);
+        this.tone(t, 'sawtooth', 70, 190, 0.5, 0.2 * v);
+        break;
+      case 'lava-rise':
+        this.tone(t, 'sawtooth', 55, 40, 1.2, 0.2 * v);
+        this.noiseBurst(t, 1.2, 0.2 * v, 'lowpass', 300, 80);
+        break;
       case 'transform':
         [440, 554, 659, 880].forEach((f, i) => this.tone(t + i * 0.06, 'triangle', f, f * 1.02, 0.18, 0.16 * v));
         break;

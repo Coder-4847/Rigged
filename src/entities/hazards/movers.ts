@@ -60,7 +60,7 @@ export class Gear implements Behavior {
     for (let i = 0; i < this.teeth; i++) {
       const a = (i / this.teeth) * Math.PI * 2;
       this.body.createFixture({
-        shape: new Box(0.32, tw, new Vec2(Math.cos(a) * (d.r + 0.18), Math.sin(a) * (d.r + 0.18)), a),
+        shape: new Box(0.14, tw, new Vec2(Math.cos(a) * (d.r + 0.08), Math.sin(a) * (d.r + 0.08)), a),
         friction: 1.3,
         ...SOLID,
         userData: solidTag(),

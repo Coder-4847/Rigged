@@ -15,7 +15,8 @@
     "test": "npm run feel && npm run hazards && npm run save && npm run input && npm run validate && npm run smoke",
     "hazards": "tsx scripts/hazards.ts",
     "save": "tsx scripts/save.ts",
-    "input": "tsx scripts/input.ts"
+    "input": "tsx scripts/input.ts",
+    "check": "tsx scripts/check.ts"
   },
   "dependencies": {
     "planck": "^1.4.2",

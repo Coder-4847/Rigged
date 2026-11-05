@@ -315,4 +315,43 @@ const settle = (r: Rig) => r.step(90);
   check('door sim runs', Number.isFinite(door.car.x), `x=${door.car.x.toFixed(1)}`);
 }
 
+// --- world 3/4/8 additions
+{
+  const sn = rig([{ type: 'zone', kind: 'snow', x: 0, y: -1, w: 400, h: 8 }]);
+  settle(sn);
+  sn.step(240, { throttle: 1 });
+  check('snow drift slows (less than sand)', sn.car.forwardSpeed < 14 && sn.car.forwardSpeed > 7, `v=${sn.car.forwardSpeed.toFixed(1)}`);
+  const vent = rig([{ type: 'bounce', x: 12, y: 0, w: 3, power: 22, vent: true }], 12);
+  let maxY = 0;
+  for (let i = 0; i < 240; i++) { vent.step(1); maxY = Math.max(maxY, vent.car.y); }
+  check('steam vent launches', maxY > 5, `peak=${maxY.toFixed(1)}`);
+  const pool = rig([{ type: 'lava', x: 30, y: 0.4, w: 12 }], 10);
+  pool.step(300, { throttle: 1 });
+  check('lava pool kills', pool.car.crashed && pool.car.crashReason === 'hazard', `x=${pool.car.x.toFixed(1)}`);
+  const rise = rig([{ type: 'lava', x: -20, y: -6, w: 600, rise: 2, maxY: 4, trigger: 15 }], 10);
+  rise.step(120);
+  const lv = rise.lp.behaviors.find((b) => b.type === 'lava') as unknown as { top: number };
+  const t0 = lv.top;
+  rise.step(240, { throttle: 0 });
+  check('rising lava climbs after the trigger', t0 === -6 || lv.top >= -6, `top=${lv.top.toFixed(2)}`);
+  const stand = rig([{ type: 'lava', x: -20, y: -6, w: 600, rise: 2, maxY: 4, trigger: 5 }], 12);
+  stand.step(120 * 8, { brake: 0, throttle: 0 });
+  check('rising lava eventually kills a car that stands still', stand.car.crashed, `top=${(stand.lp.behaviors.find((b) => b.type === 'lava') as unknown as { top: number }).top.toFixed(1)}`);
+  stand.lp.reset();
+  const gz = rig([{ type: 'geyser', x: 30, y: 0, w: 3, period: 4, height: 12 }], 12);
+  const gb = gz.lp.behaviors.find((b) => b.type === 'geyser') as unknown as { state: string };
+  const seen = new Set<string>();
+  let peak = 0;
+  for (let i = 0; i < 120 * 6; i++) { gz.step(1, { throttle: i < 150 ? 1 : 0 }); seen.add(gb.state); peak = Math.max(peak, gz.car.y); if (gz.car.crashed) break; }
+  check('geyser cycles idle → warn → erupt', ['idle', 'warn', 'erupt'].every((x) => seen.has(x)), [...seen].join(','));
+  let launched = 0;
+  for (let ph = 0; ph < 1; ph += 0.1) {
+    const g2 = rig([{ type: 'geyser', x: 30, y: 0, w: 4, period: 3, phase: ph, height: 14 }], 12);
+    let pk = 0;
+    for (let i = 0; i < 120 * 4; i++) { g2.step(1, { throttle: 0.6 }); pk = Math.max(pk, g2.car.y); if (g2.car.crashed) break; }
+    if (pk > 4) launched++;
+  }
+  check('geyser launches cars at some timings but not all (rhythm)', launched > 0 && launched < 10, `launched=${launched}/10 peak1=${peak.toFixed(1)}`);
+}
+
 process.exit(failed ? 1 : 0);

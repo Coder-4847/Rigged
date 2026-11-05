@@ -6,6 +6,7 @@ import { Crusher, Door, Gear, MovingPlatform, Saw, Spikes, Swing, Tilt } from '.
 import { Laser, Mirror, Switch } from '../../entities/hazards/beams';
 import { Boulder, Bridge, CrateBody, CrumbleBlock, Dominoes, Falling, Tnt } from '../../entities/hazards/breakables';
 import type { Tracked } from '../../physics/PhysicsWorld';
+import { Geyser, Lava } from '../../entities/hazards/lava';
 import { bounceView, cannonView, conveyorView, onewayView, transformView, ViewCtx, zoneView } from './ZoneViews';
 import { HazardView, box, glow, line, std, stripedBox } from './hz';
 
@@ -44,8 +45,8 @@ function gearView(gr: Gear): HazardView {
   const tw = ((Math.PI * r) / gr.teeth) * 1.1;
   for (let i = 0; i < gr.teeth; i++) {
     const a = (i / gr.teeth) * Math.PI * 2;
-    const t = box(0.64, tw, 3.2, METAL(), 0.1);
-    t.position.set(Math.cos(a) * (r + 0.18), Math.sin(a) * (r + 0.18), 0);
+    const t = box(0.28, tw, 3.2, METAL(), 0.05);
+    t.position.set(Math.cos(a) * (r + 0.08), Math.sin(a) * (r + 0.08), 0);
     t.rotation.z = a;
     body.add(t);
   }
@@ -326,7 +327,7 @@ function crumbleView(c: CrumbleBlock, v: ViewCtx, plank = false): HazardView {
   const h = c.d.h;
   const root = new THREE.Group();
   const n = plank ? 1 : Math.max(1, Math.round(w / 1.6));
-  const color = plank ? 0xb88445 : 0xa68b6b;
+  const color = v.world === 3 ? 0xbfe6ff : plank ? 0xb88445 : 0xa68b6b;
   for (let i = 0; i < n; i++) {
     const b = box(w / n - 0.04, h, 3.2, std(color, { rough: 0.95 }), 0.1);
     b.position.x = -w / 2 + (w / n) * (i + 0.5);
@@ -338,7 +339,6 @@ function crumbleView(c: CrumbleBlock, v: ViewCtx, plank = false): HazardView {
     }
   }
   g.add(root);
-  void v;
   return {
     object: g,
     update: (a, t) => {
@@ -397,9 +397,9 @@ function fallingView(f: Falling, v: ViewCtx): HazardView {
 
 function crateView(c: CrateBody): HazardView {
   const g = new THREE.Group();
-  const b = box(c.size, c.size, c.size, std(0xb98650, { rough: 0.9 }), 0.08);
+  const b = box(c.size, c.size, c.size, c.metal ? std(0x7d8793, { metal: 0.7, rough: 0.4 }) : std(0xb98650, { rough: 0.9 }), 0.08);
   for (const s of [-1, 1]) {
-    const plank = box(c.size * 1.01, 0.12, c.size * 1.01, std(0x8a5f34, { vc: false }), 0.02);
+    const plank = box(c.size * 1.01, 0.12, c.size * 1.01, c.metal ? std(0x4b535c, { metal: 0.6, vc: false }) : std(0x8a5f34, { vc: false }), 0.02);
     plank.position.y = s * c.size * 0.32;
     b.add(plank);
   }
@@ -461,6 +461,90 @@ function dominoView(d: Dominoes): HazardView {
   return { object: g, update: (a) => meshes.forEach((m, i) => follow(d.tracked[i], m, a)) };
 }
 
+function lavaView(l: Lava, v: ViewCtx): HazardView {
+  const g = new THREE.Group();
+  const d = l.d;
+  const mat = new THREE.MeshStandardMaterial({ color: 0xff5a14, emissive: 0xff3a00, emissiveIntensity: 1.1, roughness: 0.6 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(d.w, l.h, 5.6), mat);
+  body.position.z = 0;
+  g.add(body);
+  // brighter crust band on top + drifting dark flecks so the surface reads as molten
+  const crust = new THREE.Mesh(new THREE.BoxGeometry(d.w, 0.35, 5.7), new THREE.MeshBasicMaterial({ color: 0xffd23a }));
+  g.add(crust);
+  const glowTop = new THREE.Mesh(new THREE.BoxGeometry(d.w, 1.6, 5.8), new THREE.MeshBasicMaterial({ color: v.pal.hazard, transparent: true, opacity: 0.22, depthWrite: false }));
+  g.add(glowTop);
+  const n = Math.max(6, Math.floor(d.w / 6));
+  const flecks = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0x5a1a00 }), n);
+  flecks.frustumCulled = false;
+  g.add(flecks);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  return {
+    object: g,
+    update: (a, t) => {
+      l.tracked.at(a, tmp);
+      const top = tmp.y + l.h / 2;
+      body.position.set(d.x + d.w / 2, tmp.y, 0);
+      crust.position.set(d.x + d.w / 2, top - 0.1, 0);
+      glowTop.position.set(d.x + d.w / 2, top + 0.6, 0);
+      mat.emissiveIntensity = 0.9 + Math.sin(t * 3 + d.x) * 0.2;
+      for (let i = 0; i < n; i++) {
+        const x = d.x + ((i * 37.7 + t * (1.2 + (i % 3) * 0.5)) % d.w);
+        m.compose(new THREE.Vector3(x, top + 0.05, ((i * 13) % 5) - 2.5), q, new THREE.Vector3(1.6 + (i % 4) * 0.5, 0.12, 0.8));
+        flecks.setMatrixAt(i, m);
+      }
+      flecks.instanceMatrix.needsUpdate = true;
+    },
+  };
+}
+
+function geyserView(gz: Geyser, v: ViewCtx): HazardView {
+  const g = new THREE.Group();
+  const d = gz.d;
+  const vent = box(gz.w + 0.8, 0.5, 3, std(0x2b2f36, { metal: 0.3 }), 0.1);
+  vent.position.set(d.x, d.y + 0.1, 0);
+  g.add(vent);
+  const hole = new THREE.Mesh(new THREE.BoxGeometry(gz.w * 0.7, 0.1, 2), new THREE.MeshBasicMaterial({ color: 0xff3a00 }));
+  hole.position.set(d.x, d.y + 0.38, 0);
+  g.add(hole);
+  const colMat = new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.55, depthWrite: false });
+  const col = new THREE.Mesh(new THREE.BoxGeometry(gz.w * 0.8, 1, 2.2), colMat);
+  g.add(col);
+  const core = new THREE.Mesh(new THREE.BoxGeometry(gz.w * 0.4, 1, 1.4), new THREE.MeshBasicMaterial({ color: 0xffe066 }));
+  g.add(core);
+  const n = 10;
+  const sparks = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffb02e }), n);
+  sparks.frustumCulled = false;
+  g.add(sparks);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  void v;
+  return {
+    object: g,
+    update: (_a, t) => {
+      const erupt = gz.state === 'erupt';
+      const h = erupt ? gz.height * (0.75 + Math.sin(t * 30) * 0.05) : 0;
+      col.visible = core.visible = erupt;
+      if (erupt) {
+        col.scale.y = h;
+        col.position.set(d.x, d.y + h / 2, 0);
+        core.scale.y = h * 0.85;
+        core.position.set(d.x, d.y + h * 0.43, 0);
+      }
+      (hole.material as THREE.MeshBasicMaterial).color.setHex(gz.state === 'warn' && Math.floor(t * (8 + gz.warn * 16)) % 2 ? 0xffffff : 0xff3a00);
+      vent.position.x = d.x + (gz.state === 'warn' ? Math.sin(t * 90) * 0.06 * gz.warn : 0);
+      for (let i = 0; i < n; i++) {
+        const live = gz.state !== 'idle';
+        const k = (t * (gz.state === 'erupt' ? 1.6 : 0.8) + i / n) % 1;
+        const hh = gz.state === 'erupt' ? gz.height : 1.2 + gz.warn * 1.6;
+        m.compose(new THREE.Vector3(d.x + Math.sin(i * 9.3 + t * 3) * gz.w * 0.4, d.y + 0.5 + k * hh, 0), q, new THREE.Vector3(live ? 0.28 : 0, live ? 0.28 : 0, 0.28));
+        sparks.setMatrixAt(i, m);
+      }
+      sparks.instanceMatrix.needsUpdate = true;
+    },
+  };
+}
+
 function seesawSkip(): null {
   return null;
 }
@@ -496,5 +580,7 @@ export function makeHazardView(b: Behavior, v: ViewCtx): HazardView | null {
   if (b instanceof Boulder) return boulderView(b);
   if (b instanceof Tnt) return tntView(b, v);
   if (b instanceof Dominoes) return dominoView(b);
+  if (b instanceof Lava) return lavaView(b, v);
+  if (b instanceof Geyser) return geyserView(b, v);
   return seesawSkip();
 }

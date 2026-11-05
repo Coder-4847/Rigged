@@ -125,6 +125,7 @@ export interface LevelMeta {
   boost?: boolean;
   dark?: boolean;
   hint?: string;
+  manual?: boolean;
 }
 
 /**
@@ -284,6 +285,7 @@ export class LevelBuilder {
       finish: this.fin,
       parTime: m.parTime,
       ...(m.hint ? { hint: m.hint } : {}),
+      ...(m.manual ? { manual: true } : {}),
     };
   }
 }

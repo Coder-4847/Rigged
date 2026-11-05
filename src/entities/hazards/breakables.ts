@@ -230,17 +230,19 @@ export class CrateBody extends Prop {
   readonly type = 'crate';
   readonly size: number;
   readonly pBody: Body;
+  readonly metal: boolean;
   constructor(ctx: LevelCtx, d: Ent<'crate'>) {
     super();
+    this.metal = d.style === 'metal';
     this.size = d.size ?? 1.3;
     this.x = d.x;
     this.y = d.y + this.size / 2;
-    this.body = ctx.pw.world.createBody({ type: 'dynamic', position: new Vec2(this.x, this.y), allowSleep: true });
+    this.body = ctx.pw.world.createBody({ type: 'dynamic', position: new Vec2(this.x, this.y), allowSleep: true, linearDamping: 0.15 });
     this.body.createFixture({
       shape: new Box(this.size / 2, this.size / 2),
-      density: 0.7,
-      friction: 0.8,
-      restitution: 0.05,
+      density: this.metal ? 0.8 : 0.45,
+      friction: 0.14, // slick enough to be knocked away instead of wedging under a wheel
+      restitution: 0.4,
       filterCategoryBits: Cat.PROP,
       filterMaskBits: Cat.TERRAIN | Cat.CAR | Cat.PROP,
       userData: { kind: 'prop' } satisfies FixtureTag,
@@ -250,12 +252,16 @@ export class CrateBody extends Prop {
   }
 }
 
-/** Boulder: waits (static) until the car passes `trigger`, then rolls. */
+/**
+ * Boulder: perched (static) until the car passes `trigger`, then it rolls. Deadly only while it is
+ * moving fast, so a boulder that has come to rest is just a big rock.
+ */
 export class Boulder extends Prop {
   readonly type = 'boulder';
   readonly r: number;
   readonly pBody: Body;
   private released = false;
+  private tag: FixtureTag = { kind: 'prop' };
   constructor(
     private ctx: LevelCtx,
     readonly d: Ent<'boulder'>,
@@ -264,31 +270,34 @@ export class Boulder extends Prop {
     this.r = d.r ?? 1.6;
     this.x = d.x;
     this.y = d.y + this.r;
-    this.body = ctx.pw.world.createBody({ type: 'static', position: new Vec2(this.x, this.y), allowSleep: false });
+    this.body = ctx.pw.world.createBody({ type: 'static', position: new Vec2(this.x, this.y), allowSleep: false, angularDamping: 0.35 });
     this.body.createFixture({
       shape: new Circle(this.r),
-      density: 1.4,
+      density: 0.9,
       friction: 0.9,
       restitution: 0.1,
       filterCategoryBits: Cat.PROP,
       filterMaskBits: Cat.TERRAIN | Cat.CAR | Cat.PROP,
-      userData: { kind: 'prop' } satisfies FixtureTag,
+      userData: this.tag,
     });
     this.pBody = this.body;
     this.tracked = ctx.pw.track(this.body);
   }
   update(): void {
     const car = this.ctx.car;
-    if (!this.released && car && !car.crashed && car.chassis.getPosition().x > (this.d.trigger ?? this.d.x - 26)) {
+    if (!this.released && car && !car.crashed && car.chassis.getPosition().x > (this.d.trigger ?? this.d.x + 10)) {
       this.released = true;
       this.body.setType('dynamic');
       this.body.setAwake(true);
-      this.body.setAngularVelocity(-3);
+      this.body.setLinearVelocity(new Vec2(3.5, 0));
+      this.body.setAngularVelocity(-2.2);
       this.ctx.emit('boulder', this.x, this.y);
     }
+    if (this.released) this.tag.kind = this.body.getLinearVelocity().length() > 5 ? 'deadly' : 'prop';
   }
   reset(): void {
     this.released = false;
+    this.tag.kind = 'prop';
     this.body.setType('static');
     super.reset();
   }

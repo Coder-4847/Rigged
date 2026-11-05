@@ -76,12 +76,20 @@ export class Laser implements Behavior {
   readonly segs: BeamSeg[] = [];
   private wasOn = false;
   private static MAX = 60;
+  /** Beam reach (m). Tracking turrets and spinners only reach part of the way, so the danger zone is bounded. */
+  readonly range: number;
 
   constructor(
     private ctx: LevelCtx,
     readonly d: Ent<'laser'>,
   ) {
     this.angle = d.angle;
+    this.range = d.range ?? (d.mode === 'track' ? 30 : d.mode === 'spin' ? 14 : Laser.MAX);
+  }
+
+  /** Respawn: turrets forget where they were aiming. */
+  reset(): void {
+    this.angle = this.d.angle;
   }
 
   get isOn(): boolean {
@@ -98,6 +106,10 @@ export class Laser implements Behavior {
       case 'sweep':
         this.angle = d.angle + (d.amp ?? 0.8) * Math.sin(2 * Math.PI * (t / (d.period ?? 4) + (d.phase ?? 0)));
         break;
+      case 'spin':
+        // Full rotation: half of every turn the beam points away from the road, which is the safe window.
+        this.angle = d.angle + 2 * Math.PI * (t / (d.period ?? 4.4) + (d.phase ?? 0));
+        break;
       case 'pulse': {
         const c = cycle(t, d.period ?? 3, d.phase);
         const onFrac = d.on ?? 0.45;
@@ -108,8 +120,18 @@ export class Laser implements Behavior {
         break;
       }
       case 'track': {
+        // Aims slowly at the car, charges (preview line), then fires at wherever it is pointing — which
+        // lags behind a moving car. Standing still under it is what gets you.
+        {
+          const P = d.period ?? 2.8;
+          const c = cycle(t, P, d.phase);
+          const tele = 0.8 / P;
+          const beamOn = c < 0.2;
+          if (!beamOn && c > 1 - tele) this.charge = (c - (1 - tele)) / tele;
+          on = on && beamOn;
+        }
         const car = this.ctx.car;
-        if (car && !car.crashed) {
+        if (car && !car.crashed && Math.hypot(car.chassis.getPosition().x - d.x, car.chassis.getPosition().y - d.y) < this.range + 6) {
           const p = car.chassis.getPosition();
           const want = Math.atan2(p.y - d.y, p.x - d.x);
           let diff = want - this.angle;
@@ -137,7 +159,7 @@ export class Laser implements Behavior {
     let oy = this.d.y;
     let dx = Math.cos(this.angle);
     let dy = Math.sin(this.angle);
-    let remaining = Laser.MAX;
+    let remaining = this.range;
     const world = this.ctx.pw.world;
     for (let bounce = 0; bounce < 5 && remaining > 0.1; bounce++) {
       let best = 1;

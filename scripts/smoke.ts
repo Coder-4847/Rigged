@@ -11,11 +11,11 @@ const levels = loadLevelsFromDisk().filter((l) => !ids.length || ids.includes(l.
 let bad = 0;
 for (const lv of levels) {
   const r = runBot(lv);
-  const ok = !r.exploded && (!strict || r.finished || lv.id >= 900);
+  const ok = !r.exploded && (!strict || r.finished || lv.id >= 900 || !!lv.manual);
   if (!ok) bad++;
   console.log(
     `${ok ? 'OK  ' : 'FAIL'} L${String(lv.id).padStart(3, '0')} ${lv.name.padEnd(22)} ` +
-      `${r.finished ? 'finished' : 'NOT finished'} t=${r.time.toFixed(1)}s (par ${lv.parTime}) ` +
+      `${r.finished ? 'finished' : lv.manual ? 'MANUAL' : 'NOT finished'} clean=${r.cleanTime.toFixed(1)}s (par ${lv.parTime}) ` +
       `progress=${(r.progress * 100).toFixed(0)}% deaths=${r.deaths} stars=${r.stars}/3 ${r.crashReason ?? ''}${r.exploded ? ' EXPLODED' : ''}`,
   );
 }

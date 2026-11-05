@@ -5,7 +5,7 @@ export type SurfaceType = 'grass' | 'sand' | 'ice' | 'snow' | 'metal' | 'rock' |
 
 export type DecoKind = 'tree' | 'pine' | 'bush' | 'rock' | 'flower' | 'sign' | 'cloud' | 'cactus' | 'crate';
 
-export type ZoneKind = 'sand' | 'goo' | 'boost' | 'wind' | 'lowgrav' | 'flipgrav' | 'magnet' | 'vacuum';
+export type ZoneKind = 'sand' | 'snow' | 'goo' | 'boost' | 'wind' | 'lowgrav' | 'flipgrav' | 'magnet' | 'vacuum';
 
 /**
  * Every level object. `ctrl` names a switch id: lasers are OFF while their switch is on,
@@ -19,7 +19,7 @@ export type EntityData =
   // --- surfaces & forces
   | { type: 'zone'; kind: ZoneKind; x: number; y: number; w: number; h?: number; strength?: number; angle?: number }
   | { type: 'conveyor'; x: number; y: number; w: number; speed: number }
-  | { type: 'bounce'; x: number; y: number; w?: number; power?: number }
+  | { type: 'bounce'; x: number; y: number; w?: number; power?: number; vent?: boolean }
   | { type: 'cannon'; x: number; y: number; angle: number; power?: number }
   | { type: 'oneway'; x: number; y: number; w: number }
   | { type: 'transform'; x: number; y: number; scale?: number; vehicle?: VehicleId; h?: number }
@@ -33,16 +33,19 @@ export type EntityData =
   | { type: 'saw'; x: number; y: number; r?: number; x2?: number; y2?: number; period?: number; phase?: number }
   | { type: 'spikes'; x: number; y: number; w: number; angle?: number }
   // --- beams
-  | { type: 'laser'; x: number; y: number; angle: number; mode: 'static' | 'sweep' | 'pulse' | 'track'; amp?: number; period?: number; phase?: number; on?: number; ctrl?: string }
+  | { type: 'laser'; x: number; y: number; angle: number; mode: 'static' | 'sweep' | 'pulse' | 'track' | 'spin'; range?: number; amp?: number; period?: number; phase?: number; on?: number; ctrl?: string }
   | { type: 'mirror'; x: number; y: number; w?: number; angle: number }
   | { type: 'switch'; id: string; x: number; y: number }
   // --- breakables / props
   | { type: 'crumble'; x: number; y: number; w: number; h?: number; delay?: number }
   | { type: 'bridge'; x: number; y: number; w: number; delay?: number }
   | { type: 'falling'; kind: 'icicle' | 'rock' | 'sign'; x: number; y: number; lead?: number }
-  | { type: 'crate'; x: number; y: number; size?: number }
+  | { type: 'crate'; x: number; y: number; size?: number; style?: 'wood' | 'metal' }
   | { type: 'boulder'; x: number; y: number; r?: number; trigger?: number }
   | { type: 'tnt'; x: number; y: number }
+  // --- lava world
+  | { type: 'lava'; x: number; y: number; w: number; h?: number; rise?: number; maxY?: number; trigger?: number }
+  | { type: 'geyser'; x: number; y: number; w?: number; period: number; phase?: number; height?: number }
   | { type: 'dominoes'; x: number; y: number; n?: number; spacing?: number };
 
 /** One playable level. Pure data; see `src/levels/builder.ts` for authoring helpers. */
@@ -68,4 +71,6 @@ export interface LevelData {
   /** Gold-medal time in seconds. */
   parTime: number;
   hint?: string;
+  /** Needs a human (e.g. gravity-flip puzzles): the bot can't clear it, so the smoke test only checks for physics blow-ups. */
+  manual?: boolean;
 }

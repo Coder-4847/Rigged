@@ -93,6 +93,34 @@ Built phase by phase (see the master prompt).
     hints switch glyphs (keyboard keys follow your remaps, ✕○△ vs ABXY, GAS/BRAKE for touch) based on the last device used.
   - Phones default to Low graphics under Auto and the FPS watchdog can lower it further.
 
+- **Phase 7 — Content:** all **100 levels** (10 worlds × 10). Worlds 2–10 are authored from a tuned *segment kit*
+  (`src/levels/author/kit.ts`) so every piece is consistent and fair: jump presets with proven gap sizes, rhythm rows
+  whose phases are synced to a cruising car (one well-timed run clears the whole row), flat run-ups before anything
+  dangerous, and an automatic rule of **at most one timed hazard cluster between checkpoints**.
+  New engine pieces for these worlds: snow drag, steam vents, lava pools / rising lava, geysers, metal crates,
+  spinning lasers, tracking turrets that charge and fire at where you *were*, boulder chases, ice-coloured crumble blocks.
+  Each world introduces two ideas and ends in a gauntlet (levels 20, 30 … 100, with extra checkpoints).
+
+  | World | Levels | Twist |
+  | --- | --- | --- |
+  | 1 Grasslands | 1–10 | tutorial: ramps, gaps, tilt, seesaws |
+  | 2 Desert Ruins | 11–20 | sand, crumbling blocks, collapsing bridges, boulder chases, spike pits |
+  | 3 Frostbite | 21–30 | ice, snowdrifts, icicles, icy slopes, thin ice |
+  | 4 Factory | 31–40 | conveyors, gears, crushers, ferry platforms, steam vents, saws |
+  | 5 Laser Lab | 41–50 | pulse / spinning / switch lasers, mirrors, doors, turrets |
+  | 6 Magnet Mines | 51–60 | magnets, metal crates, dark tunnels with headlights, TNT |
+  | 7 Skyline | 61–70 | rooftop gaps, wind, springboards, tilting plates, falling signs |
+  | 8 Lava Core | 71–80 | lava pits, geysers, wrecking balls, rock bridges, rising lava |
+  | 9 Zero-G Station | 81–90 | half gravity, low-gravity bubbles, a gravity-flip room (87, manual) |
+  | 10 Chaos Circuit | 91–100 | remix, faster rhythms, size-changing pads, a ~3 minute final run |
+
+  **Validation:** `npm run check -- --world N` (or ids) bot-tests levels straight from the authoring code. The bot
+  retries with a different start delay each attempt so hazard rhythms can line up, brakes for ferry platforms, and
+  its best line is used to place stars (star 0 on the line, star 1 on an airborne stretch of it — so both are
+  provably reachable — star 2 hidden behind the start) and par times (clean-run time + 20%).
+  All 99 non-manual levels are cleared by the bot; level 87 (gravity flip) is flagged `manual` and only checked for
+  physics blow-ups. `npm run levels` regenerates the JSON.
+
 Design decisions (ambiguities resolved for fun/readability): brake doubles as reverse once stopped; gas+brake together
 is a handbrake; air tilt is a dedicated axis (Up = nose up).
 
