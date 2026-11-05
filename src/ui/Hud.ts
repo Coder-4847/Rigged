@@ -15,6 +15,8 @@ export interface CompleteInfo {
   hasNext: boolean;
   name: string;
   newBest: boolean;
+  /** Extra line (new stars, world unlocked). */
+  note?: string;
 }
 
 /** In-level HUD + level-complete card (DOM overlay). */
@@ -34,7 +36,11 @@ export class Hud {
     this.root.className = 'hud';
     this.root.innerHTML = `
       <div class="hud-top">
-        <div class="pill lvl"></div>
+        <div class="hud-left">
+          <button class="hud-btn" data-pause aria-label="Pause" title="Pause (Esc)">❚❚</button>
+          <button class="hud-btn" data-restart aria-label="Restart" title="Restart (R)">⟲</button>
+          <div class="pill lvl"></div>
+        </div>
         <div class="pill" data-r>
           <span class="cp-pips"></span>
           <span data-stars style="display:inline-flex;gap:3px"></span>
@@ -57,6 +63,11 @@ export class Hud {
       holder.appendChild(s);
       this.stars.push(s);
     }
+  }
+
+  bindButtons(h: { onPause: () => void; onRestart: () => void }): void {
+    this.root.querySelector('[data-pause]')!.addEventListener('click', h.onPause);
+    this.root.querySelector('[data-restart]')!.addEventListener('click', h.onRestart);
   }
 
   setLevel(id: number, name: string, checkpoints: number, accent: number, hint?: string): void {
@@ -99,7 +110,7 @@ export class Hud {
     this.root.style.display = v ? '' : 'none';
   }
 
-  showComplete(info: CompleteInfo, onNext: () => void, onRetry: () => void): void {
+  showComplete(info: CompleteInfo, onNext: () => void, onRetry: () => void, onLevels?: () => void): void {
     this.hideComplete();
     const el = document.createElement('div');
     el.className = 'complete';
@@ -112,11 +123,13 @@ export class Hud {
       <div class="card">
         <h2>LEVEL COMPLETE</h2>
         <div class="sub">${info.name}${info.newBest ? ' · New best!' : ''}</div>
+        ${info.note ? `<div class="note">${info.note}</div>` : ''}
         <div class="stars">${[0, 1, 2].map(() => `<span class="star-slot">${STAR_SVG}</span>`).join('')}</div>
         <div class="time">00:00.0</div>
         <div class="par">Par ${fmtTime(info.par)} · ☠ ${info.deaths}</div>
         <div class="medals">${medals.map(([n, on]) => `<span class="medal ${on ? 'on' : ''}">${n}</span>`).join('')}</div>
         <div class="btns">
+          <button class="btn alt" data-levels>Levels</button>
           <button class="btn alt" data-retry>Retry <small>(R)</small></button>
           ${info.hasNext ? '<button class="btn" data-next>Next ▶</button>' : ''}
         </div>
@@ -124,6 +137,7 @@ export class Hud {
     this.parent.appendChild(el);
     this.card = el;
     el.querySelector('[data-retry]')!.addEventListener('click', onRetry);
+    el.querySelector('[data-levels]')!.addEventListener('click', () => onLevels?.());
     el.querySelector('[data-next]')?.addEventListener('click', onNext);
     requestAnimationFrame(() => el.classList.add('show'));
     // staged reveal: stars pop one by one, time counts up
@@ -143,7 +157,14 @@ export class Hud {
       if (k < 1 && this.card === el) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-    (el.querySelector('[data-next]') ?? el.querySelector('[data-retry]'))?.dispatchEvent(new Event('focus'));
+    el.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape') onLevels?.();
+      if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+        const b = [...el.querySelectorAll<HTMLElement>('.btn')];
+        const i = b.indexOf(document.activeElement as HTMLElement);
+        b[(i + (e.code === 'ArrowRight' ? 1 : -1) + b.length) % b.length]?.focus();
+      }
+    });
     (el.querySelector<HTMLElement>('[data-next]') ?? el.querySelector<HTMLElement>('[data-retry]'))?.focus();
   }
 

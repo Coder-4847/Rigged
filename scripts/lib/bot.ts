@@ -9,8 +9,7 @@ import { Car } from '../../src/entities/Car';
 import { LevelPhysics } from '../../src/entities/LevelPhysics';
 import { VEHICLES } from '../../src/config';
 import type { LevelData } from '../../src/levels/types';
-import { surfaceY } from '../../src/levels/builder';
-import type { Pt } from '../../src/levels/builder';
+import { Autopilot } from '../../src/core/Autopilot';
 import type { InputState } from '../../src/core/Input';
 
 export function loadLevelsFromDisk(): LevelData[] {
@@ -58,61 +57,17 @@ export function runBot(level: LevelData, opts: BotOptions = {}): BotResult {
   const inp: InputState = { throttle: 0, brake: 0, tilt: 0, boost: false, restart: false, pause: false };
   let deaths = 0;
   let t = 0;
-  let stall = 0;
-  let backup = 0;
   const collected = new Set<number>();
   const pending = new Set<number>();
   const trace: BotResult['trace'] = [];
   let exploded = false;
   let result: Partial<BotResult> = {};
   const retries = opts.retries ?? 3;
-  const lines: Pt[][] = level.entities.flatMap((e) => (e.type === 'terrain' ? [e.points as Pt[]] : []));
-
-  /** Predict where a ballistic flight lands and the ground angle there (what a good player aims for). */
-  const landingAngle = (x: number, y: number, vx: number, vy: number): number | null => {
-    const g = -(level.gravity ?? -26);
-    for (let k = 1; k < 200; k++) {
-      const tt = k * 0.02;
-      const px = x + vx * tt;
-      const py = y + vy * tt - 0.5 * g * tt * tt;
-      const sy = surfaceY(lines, px);
-      if (sy !== null && py < sy + 0.9 && vy - g * tt < 0) {
-        const y0 = surfaceY(lines, px - 1.5);
-        const y1 = surfaceY(lines, px + 1.5);
-        if (y0 === null || y1 === null) return 0;
-        return Math.atan2(y1 - y0, 3);
-      }
-    }
-    return null;
-  };
+  const pilot = new Autopilot(level);
 
   for (let i = 0; i < maxTime / dt; i++) {
     t = i * dt;
-    inp.throttle = 1;
-    inp.brake = 0;
-    inp.tilt = 0;
-    if (backup > 0) {
-      backup -= dt;
-      inp.throttle = 0;
-      inp.brake = 1;
-    } else if (car.grounded && Math.abs(car.forwardSpeed) < 1.2) {
-      stall += dt;
-      if (stall > 1.2) {
-        backup = 1.6;
-        stall = 0;
-      }
-    } else stall = 0;
-    const p0 = car.chassis.getPosition();
-    if (!car.grounded && car.airTime > 0.15) {
-      const v = car.chassis.getLinearVelocity();
-      let want = Math.atan2(v.y, v.x);
-      if (v.y < 2) {
-        const la = landingAngle(p0.x, p0.y, v.x, v.y);
-        if (la !== null) want = la;
-      }
-      const err = want - car.chassis.getAngle();
-      inp.tilt = Math.max(-1, Math.min(1, err * 2.2 - car.chassis.getAngularVelocity() * 0.35));
-    }
+    pilot.drive(car, dt, inp);
     car.update(dt, inp);
     lp.update(dt);
     pw.step(dt);
@@ -154,8 +109,7 @@ export function runBot(level: LevelData, opts: BotOptions = {}): BotResult {
       lp.reset();
       car = new Car(pw, def, respawn[0], respawn[1], { antiFlip: level.antiFlip ?? 1, boostAllowed: !!level.boost });
       lp.setCar(car);
-      stall = 0;
-      backup = 0;
+      pilot.reset();
     }
   }
   const x = car.chassis.getPosition().x;

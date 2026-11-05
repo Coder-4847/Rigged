@@ -12,8 +12,9 @@
     "validate": "tsx scripts/validate-levels.ts",
     "smoke": "tsx scripts/smoke.ts --strict",
     "feel": "tsx scripts/feel.ts",
-    "test": "npm run feel && npm run hazards && npm run validate && npm run smoke",
-    "hazards": "tsx scripts/hazards.ts"
+    "test": "npm run feel && npm run hazards && npm run save && npm run validate && npm run smoke",
+    "hazards": "tsx scripts/hazards.ts",
+    "save": "tsx scripts/save.ts"
   },
   "dependencies": {
     "planck": "^1.4.2",

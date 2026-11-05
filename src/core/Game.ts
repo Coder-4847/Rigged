@@ -17,13 +17,25 @@ import type { HazardEvent } from '../entities/hazards/core';
 import { Laser } from '../entities/hazards/beams';
 import { Saw } from '../entities/hazards/movers';
 import { THEMES, WorldTheme } from '../levels/themes';
-import { LEVEL_COUNT, getLevel, hasLevel } from '../levels/registry';
+import { getLevel, hasLevel } from '../levels/registry';
 import type { LevelData } from '../levels/types';
 import { Vec2 } from 'planck';
 import { Hud } from '../ui/Hud';
+import { Autopilot } from './Autopilot';
+import { popcount, Settings } from './Save';
 import { Wipe } from '../ui/Wipe';
 
 type Phase = 'playing' | 'crashed' | 'finished';
+
+export interface CompleteResult {
+  id: number;
+  name: string;
+  time: number;
+  par: number;
+  starMask: number;
+  stars: number;
+  deaths: number;
+}
 
 const DEV = import.meta.env.DEV || location.search.includes('dev');
 
@@ -83,6 +95,23 @@ export class Game {
   private lineAcc = 0;
   private lastInput = { brake: false, throttle: 0, tilt: 0 };
 
+  /** 'attract' = AI drives behind the menus; 'play' = the player is in control. */
+  mode: 'attract' | 'play' = 'attract';
+  paused = false;
+  private pilot?: Autopilot;
+  private pilotInput = { throttle: 0, brake: 0, tilt: 0, boost: false, restart: false, pause: false };
+  /** Fired when a level is cleared (play mode). */
+  onComplete?: (r: CompleteResult) => void;
+  /** Fired when the pause key is pressed during play. */
+  onPauseRequest?: () => void;
+  /** Fired when auto-quality lowers the graphics setting. */
+  onQualityDrop?: (q: string) => void;
+  private shakeOn = true;
+  private reduced = false;
+  autoQuality = true;
+  private slowFrames = 0;
+  private qualityCool = 0;
+
   constructor(canvas: HTMLCanvasElement, ui: HTMLElement) {
     this.renderer = new Renderer(canvas);
     this.camRig = new CameraRig(this.renderer.camera);
@@ -92,8 +121,6 @@ export class Game {
     this.wipe = new Wipe(ui);
     this.particles = new Particles(this.renderer.scene);
     this.particles.density = CONFIG.quality[this.renderer.quality].particles;
-    const q = new URLSearchParams(location.search).get('level');
-    this.loadLevel(q ? Number(q) : 1);
     this.loop = new Loop(
       (dt) => this.step(dt),
       (alpha, dt) => this.render(alpha, dt),
@@ -108,10 +135,13 @@ export class Game {
       if (e.code === 'F3') (this.overlay.toggle(), e.preventDefault());
       if (DEV && e.code === 'BracketRight') this.goToLevel(this.data.id + 1);
       if (DEV && e.code === 'BracketLeft') this.goToLevel(this.data.id - 1);
-      if (e.code === 'Enter' && this.hud.completeOpen) this.nextLevel();
     });
     document.addEventListener('visibilitychange', () => {
-      this.loop.paused = document.hidden;
+      this.loop.paused = document.hidden || this.paused;
+      if (document.hidden && this.mode === 'play' && !this.paused) this.onPauseRequest?.();
+    });
+    window.addEventListener('blur', () => {
+      if (this.mode === 'play' && !this.paused) this.onPauseRequest?.();
     });
   }
 
@@ -128,6 +158,7 @@ export class Game {
     this.pw = new PhysicsWorld();
     this.debris = new Debris(this.pw, this.renderer.scene);
     this.data = data;
+    this.pilot = new Autopilot(data);
     this.theme = THEMES[data.world] ?? THEMES[1];
     this.levelPhys = new LevelPhysics(this.pw, data);
     this.view = new LevelView(this.renderer.scene, data, this.theme, this.levelPhys);
@@ -155,21 +186,10 @@ export class Game {
     this.spawnCar();
   }
 
-  /** Slide-wipe transition to another level. */
+  /** Dev shortcut: wipe-transition to another level. */
   goToLevel(id: number): void {
-    if (this.loading || !hasLevel(id)) return;
-    this.loading = true;
-    this.audio.whoosh();
-    this.wipe.cover(180);
-    setTimeout(() => {
-      this.loadLevel(id);
-      this.wipe.reveal(260);
-      this.loading = false;
-    }, 190);
-  }
-
-  nextLevel(): void {
-    if (this.data.id < LEVEL_COUNT) this.goToLevel(this.data.id + 1);
+    if (this.loading || this.mode !== 'play') return;
+    this.startPlay(id);
   }
 
   private spawnCar(): void {
@@ -244,7 +264,7 @@ export class Game {
   private reactTo(e: HazardEvent, cx: number, cy: number): void {
     const dist = Math.hypot(e.x - cx, e.y - cy);
     const vol = Math.pow(Math.max(0, 1 - dist / 48), 1.6);
-    this.audio.hazard(e.kind, vol);
+    if (this.mode === 'play') this.audio.hazard(e.kind, vol);
     const P = this.particles;
     const dust = this.theme.dust;
     switch (e.kind) {
@@ -255,7 +275,7 @@ export class Game {
       case 'explosion':
         this.camRig.addShake(0.9 * vol);
         P.burst(40, e.x, e.y, { speed: 14, up: 4, life: 0.8, size: 0.4, color: [0xffd34a, 0xff7a2e, 0xff4a1e, 0x333333], gravity: 0.5, drag: 0.8 });
-        navigator.vibrate?.(vol > 0.3 ? 60 : 0);
+        this.buzz(vol > 0.3 ? 60 : 0);
         break;
       case 'fall-hit':
         this.camRig.addShake(0.3 * vol);
@@ -307,9 +327,9 @@ export class Game {
     this.hud.setDeaths(this.deaths);
     this.lastPos = { x: cp.x, y: cp.y };
     this.camRig.addShake(0.85);
-    this.audio.crash();
+    if (this.mode === 'play') this.audio.crash();
     this.audio.silenceEngine();
-    navigator.vibrate?.([40, 30, 60]);
+    this.buzz([40, 30, 60]);
     this.particles.burst(26, cp.x, cp.y, { speed: 9, up: 3, life: 0.7, size: 0.2, color: [0xffd34a, 0xff9a2e, 0xffffff], gravity: 1, drag: 0.4 });
     this.particles.burst(14, cp.x, cp.y, { speed: 4, up: 1, life: 0.9, size: 0.45, color: [0x555b63, 0x3a3f46], gravity: -0.3, drag: 1.6 });
     this.particles.burst(12, cp.x, cp.y, { speed: 7, up: 2, life: 0.8, size: 0.28, color: car.def.color, gravity: 1, drag: 0.5 });
@@ -351,7 +371,7 @@ export class Game {
     this.pending.clear();
     this.view!.flags[i].activate();
     this.hud.setCheckpoints(i + 1);
-    this.audio.checkpoint();
+    if (this.mode === 'play') this.audio.checkpoint();
     this.particles.burst(14, c[0], c[1] + 2.8, { speed: 5, up: 3, life: 0.8, size: 0.22, color: [0x4cd964, 0xffffff, 0xffe066], gravity: 0.6 });
     this.hud.showHint('Checkpoint!', 1200);
   }
@@ -360,11 +380,11 @@ export class Game {
     const st = this.view!.stars[i];
     st.collect();
     this.pending.add(i);
-    this.audio.chime(this.pending.size - 1 + this.banked.size);
+    if (this.mode === 'play') this.audio.chime(this.pending.size - 1 + this.banked.size);
     this.particles.burst(16, st.x, st.y, { speed: 6, up: 1, life: 0.7, size: 0.2, color: [0xffd23a, 0xffffff, 0xffa800], gravity: 0.3, drag: 0.8 });
     const on = this.view!.stars.map((_, k) => this.banked.has(k) || this.pending.has(k));
     this.hud.setStars(on);
-    navigator.vibrate?.(10);
+    this.buzz(10);
   }
 
   private onFinish(): void {
@@ -373,11 +393,11 @@ export class Game {
     this.finishFx = 1.1;
     this.pending.forEach((s) => this.banked.add(s));
     this.pending.clear();
-    this.audio.fanfare();
+    if (this.mode === 'play') this.audio.fanfare();
     this.audio.silenceEngine();
     this.slowBeat = 0.45;
     this.camRig.addShake(0.25);
-    navigator.vibrate?.([30, 40, 30, 40, 90]);
+    this.buzz([30, 40, 30, 40, 90]);
   }
 
   private confetti(): void {
@@ -387,6 +407,105 @@ export class Game {
       this.particles.burst(36, fx, fy + 7, {
         speed: 11, up: 8, life: 1.6, size: 0.32, color: colors, gravity: 0.7, drag: 0.7, z: side * 3,
       });
+    }
+  }
+
+  /** Haptics only while actually playing. */
+  private buzz(p: number | number[]): void {
+    if (this.mode === 'play' && !this.reduced) navigator.vibrate?.(p);
+  }
+
+  /** Menus: run the AI on a level behind the UI. */
+  startAttract(id: number): void {
+    this.mode = 'attract';
+    this.paused = false;
+    this.loop.paused = document.hidden;
+    this.audio.silenceEngine();
+    this.audio.ambient(0, 0);
+    this.loadLevel(hasLevel(id) ? id : 1);
+    this.hud.setVisible(false);
+    this.camRig.snapTo({ x: this.data.spawn[0], y: this.data.spawn[1], vx: 0, vy: 0, speedFrac: 0 });
+  }
+
+  /** Start (or restart) a level for the player. */
+  startPlay(id: number, withWipe = true): void {
+    if (!hasLevel(id)) return;
+    const go = () => {
+      this.mode = 'play';
+      this.paused = false;
+      this.loop.paused = document.hidden;
+      this.loadLevel(id);
+      this.hud.setVisible(true);
+    };
+    if (!withWipe) return go();
+    this.loading = true;
+    this.audio.whoosh();
+    this.wipe.cover(this.reduced ? 80 : 170);
+    setTimeout(() => {
+      go();
+      this.wipe.reveal(this.reduced ? 120 : 260);
+      this.loading = false;
+    }, this.reduced ? 90 : 180);
+  }
+
+  /** Attract mode: when the AI clears a level, pick the next so the backdrop keeps changing. */
+  private attractCycle(): void {
+    const next = this.data.id + 1;
+    this.loadLevel(hasLevel(next) && next < 900 && next <= this.attractMax ? next : this.attractMin);
+  }
+  attractMin = 1;
+  attractMax = 1;
+
+  pause(): void {
+    if (this.paused) return;
+    this.paused = true;
+    this.loop.paused = true;
+    this.audio.silenceEngine();
+    this.audio.ambient(0, 0);
+  }
+
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.loop.paused = document.hidden;
+  }
+
+  /** Apply user settings (called on boot and whenever they change). */
+  applySettings(s: Settings): void {
+    this.audio.setVolumes({ master: s.master, sfx: s.sfx, music: s.music });
+    this.audio.setMuted(s.muted);
+    this.shakeOn = s.shake;
+    this.reduced = s.reducedMotion;
+    document.documentElement.classList.toggle('reduce-motion', s.reducedMotion);
+    this.autoQuality = s.quality === 'auto';
+    const q = s.quality === 'auto' ? (this.renderer.quality === 'low' && !this.autoQuality ? 'low' : this.autoQualityStart(s)) : s.quality;
+    if (q !== this.renderer.quality) this.setQuality(q);
+    this.input.keyboard.bindings = structuredClone(s.bindings);
+  }
+
+  private autoQualityStart(s: Settings): 'low' | 'med' | 'high' {
+    if (s.quality !== 'auto') return s.quality;
+    // Phones/tablets and weak GPUs start lower; the FPS watchdog drops further if needed.
+    const coarse = matchMedia('(pointer: coarse)').matches;
+    return coarse ? 'low' : this.renderer.quality === 'high' ? 'high' : 'med';
+  }
+
+  setQuality(q: 'low' | 'med' | 'high'): void {
+    this.renderer.setQuality(q);
+    this.particles.density = CONFIG.quality[q].particles;
+  }
+
+  /** Auto-quality: if frames stay slow for ~3 s, step graphics down once and tell the player. */
+  private watchPerformance(frameDt: number): void {
+    this.qualityCool -= frameDt;
+    if (!this.autoQuality || this.qualityCool > 0 || this.renderer.quality === 'low') return;
+    this.slowFrames = frameDt > 1 / 36 ? this.slowFrames + frameDt : Math.max(0, this.slowFrames - frameDt * 2);
+    if (this.slowFrames > 3) {
+      this.slowFrames = 0;
+      this.qualityCool = 8;
+      const next = this.renderer.quality === 'high' ? 'med' : 'low';
+      this.setQuality(next);
+      this.onQualityDrop?.(next);
     }
   }
 
@@ -402,12 +521,31 @@ export class Game {
       this.input.endFrame();
       return;
     }
-    const input = this.input.poll();
-    if (input.restart) {
-      if (this.hud.completeOpen) this.restartLevel();
-      else this.restart();
+    if (this.paused) {
       this.input.endFrame();
       return;
+    }
+    let input = this.input.poll();
+    if (this.mode === 'attract') {
+      // AI drives behind the menus; player input is ignored.
+      if (this.phase === 'playing' && this.car) this.pilot!.drive(this.car, dt, this.pilotInput);
+      else {
+        this.pilotInput.throttle = 0;
+        this.pilotInput.brake = 0.4;
+      }
+      input = this.pilotInput;
+    } else {
+      if (input.pause && !this.hud.completeOpen && this.phase !== 'finished') {
+        this.onPauseRequest?.();
+        this.input.endFrame();
+        return;
+      }
+      if (input.restart) {
+        if (this.hud.completeOpen) this.restartLevel();
+        else this.restart();
+        this.input.endFrame();
+        return;
+      }
     }
     const playing = this.phase === 'playing';
     if (this.phase !== 'crashed') {
@@ -450,8 +588,13 @@ export class Game {
   // ------------------------------------------------------------------ rendering
 
   private render(alpha: number, frameDt: number): void {
+    if (this.paused) {
+      this.renderer.render();
+      return;
+    }
     this.time += frameDt;
     const phase = this.phase;
+    this.watchPerformance(frameDt);
 
     // Crash -> wipe -> respawn timeline (wall-clock, independent of slow-mo).
     if (phase === 'crashed') {
@@ -474,28 +617,31 @@ export class Game {
         this.finishFx -= frameDt;
         this.confetti();
       }
-      if (!this.completeShown && this.finishTimer > 1.35) {
+      if (!this.completeShown && this.finishTimer > (this.mode === 'attract' ? 1.0 : 1.35)) {
         this.completeShown = true;
-        const total = this.view!.stars.filter((_, i) => this.banked.has(i)).length;
-        this.hud.showComplete(
-          {
+        if (this.mode === 'attract') {
+          this.attractCycle();
+        } else {
+          let mask = 0;
+          this.view!.stars.forEach((_, i) => {
+            if (this.banked.has(i)) mask |= 1 << i;
+          });
+          this.onComplete?.({
+            id: this.data.id,
+            name: this.data.name,
             time: this.levelTime,
             par: this.data.parTime,
-            stars: total,
+            starMask: mask,
+            stars: popcount(mask),
             deaths: this.deaths,
-            hasNext: this.data.id < LEVEL_COUNT,
-            name: this.data.name,
-            newBest: false,
-          },
-          () => this.nextLevel(),
-          () => this.restartLevel(),
-        );
+          });
+        }
       }
     }
 
     // Slow-mo beat after a big jump lands.
     if (this.slowBeat > 0) this.slowBeat -= frameDt;
-    this.loop.timeScale = this.devSlow ? 0.25 : this.slowBeat > 0 ? 0.45 : 1;
+    this.loop.timeScale = this.devSlow ? 0.25 : this.slowBeat > 0 && !this.reduced ? 0.45 : 1;
 
     const car = this.car;
     const def = car.def;
@@ -517,9 +663,9 @@ export class Game {
         const imp = car.lastLanding;
         car.lastLanding = 0;
         this.model.landed(imp);
-        this.audio.thump(imp);
+        if (this.mode === 'play') this.audio.thump(imp);
         if (imp > CONFIG.fx.landingMin) this.camRig.addShake(Math.min(0.5, imp / 28));
-        if (imp > CONFIG.fx.landingMin) navigator.vibrate?.(Math.min(40, 8 + imp * 2));
+        if (imp > CONFIG.fx.landingMin) this.buzz(Math.min(40, 8 + imp * 2));
         for (let i = 0; i < 2; i++) {
           const w = i === 0 ? w0 : w1;
           this.particles.burst(Math.min(10, 3 + Math.round(imp / 2)), w.x, w.y - def.wheel.radius, {
@@ -531,7 +677,7 @@ export class Game {
 
       this.emitDriveFx(frameDt, c, w0, w1);
 
-      if (this.phase === 'playing') {
+      if (this.phase === 'playing' && this.mode === 'play') {
         this.audio.engine(
           Math.min(1, Math.abs(car.forwardSpeed) / def.motor.maxSpeed),
           this.lastInput.throttle,
@@ -541,7 +687,7 @@ export class Game {
       }
     }
 
-    if (this.phase === 'playing') this.updateAmbient();
+    if (this.phase === 'playing' && this.mode === 'play') this.updateAmbient();
     this.debris.update(alpha, frameDt);
     this.particles.update(frameDt);
 
@@ -559,6 +705,7 @@ export class Game {
       frameDt,
       { x: this.lastPos.x, y: this.lastPos.y, vx, vy, speedFrac },
       this.renderer.camera.aspect,
+      this.shakeOn && !this.reduced,
     );
     this.renderer.followSun(this.camRig.cx, this.camRig.cy);
     this.view?.update(alpha, frameDt, this.camRig.cx, this.camRig.cy);
@@ -674,7 +821,7 @@ export class Game {
     }
 
     // Speed lines streak past in front of the lane.
-    if (speed > CONFIG.fx.speedLinesFrom) {
+    if (speed > CONFIG.fx.speedLinesFrom && !this.reduced) {
       this.lineAcc += dt * (speed - CONFIG.fx.speedLinesFrom) * 6;
       const halfW = this.camRig.viewW / 2;
       while (this.lineAcc > 1) {

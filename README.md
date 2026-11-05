@@ -70,6 +70,18 @@ Built phase by phase (see the master prompt).
   | Breakables | crumbling blocks, collapsing bridges, falling icicles/rocks/signs (ground ring warns ~1 s ahead), TNT (hit → flashing fuse → blast), pushable crates, dominoes, rolling boulders |
   | Misc | switches, transform pads (resize the car; vehicle swap hooks in once more vehicles exist), ceilings/tunnels |
 
+- **Phase 5 — UI shell:** main menu (Play/Continue), world select (parallax scene cards, locked/coming-soon states),
+  level select (stars, best time, finish/par/all-stars medals, lock + skip allowance), HUD with pause/restart buttons,
+  pause menu, level-complete card (new best, new stars, world-unlock note, Next/Retry/Levels), settings (volumes,
+  mute, graphics Auto/Low/Med/High, camera shake, reduced motion, touch-controls mode, full keyboard remapping with
+  conflict swapping), credits. A live AI-driven "attract mode" plays behind the menus. Versioned, corruption-safe
+  `localStorage` save (`src/core/Save.ts`). Auto-quality drops graphics if frames stay slow. Auto-pause on tab blur.
+  Menus are fully keyboard-navigable (arrows/WASD, Enter, Esc/Backspace); `UI.move/confirm/cancel` are the hooks the
+  gamepad layer will use in the next phase. `M` toggles mute.
+
+  Unlock rules: a level opens when either of the two before it is cleared (so one hard level never blocks you);
+  a world opens when 8/10 of the previous world are cleared **or** you hold 9×(world−1) stars.
+
 Design decisions (ambiguities resolved for fun/readability): brake doubles as reverse once stopped; gas+brake together
 is a handbrake; air tilt is a dedicated axis (Up = nose up).
 
