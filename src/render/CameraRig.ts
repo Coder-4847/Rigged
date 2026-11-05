@@ -21,6 +21,8 @@ export class CameraRig {
   private trauma = 0;
   private t = 0;
   private lookAhead = 0;
+  /** Level camera limits (world metres); null = unbounded. */
+  bounds: { minX: number; maxX: number; minY: number; maxY: number } | null = null;
   /** Developer free-cam offset (null = off). */
   free: { x: number; y: number; w: number } | null = null;
 
@@ -69,6 +71,17 @@ export class CameraRig {
     if (Math.abs(dx) > limX) this.cx = tgt.x - Math.sign(dx) * limX;
     const dy = tgt.y + C.yBias * 0.4 - this.cy;
     if (Math.abs(dy) > limY) this.cy = tgt.y + C.yBias * 0.4 - Math.sign(dy) * limY;
+
+    // Level bounds (soft preference — the car-in-frame clamp above wins at the edges).
+    if (this.bounds) {
+      const b = this.bounds;
+      if (b.maxX - b.minX > this.viewW) this.cx = THREE.MathUtils.clamp(this.cx, b.minX + halfW, b.maxX - halfW);
+      this.cy = Math.max(this.cy, b.minY + halfH);
+      this.cy = Math.min(this.cy, b.maxY - halfH);
+      // Re-apply the safety clamp in case bounds pushed the car toward the edge.
+      const ddx = tgt.x - this.cx;
+      if (Math.abs(ddx) > limX) this.cx = tgt.x - Math.sign(ddx) * limX;
+    }
 
     // Shake
     this.trauma = Math.max(0, this.trauma - C.shakeDecay * dt);

@@ -32,9 +32,12 @@ export function buildTerrainMesh(
   slab.lineTo(last[0], floorY);
   slab.closePath();
 
+  // The slab runs far behind the lane so scenery has ground to stand on and the world has depth.
+  const back = 38;
+  const front = lane / 2;
   const bevel = 0.18;
   const slabGeo = new THREE.ExtrudeGeometry(slab, {
-    depth: lane - bevel * 2,
+    depth: front + back - bevel * 2,
     bevelEnabled: true,
     bevelThickness: bevel,
     bevelSize: bevel,
@@ -42,7 +45,7 @@ export function buildTerrainMesh(
     bevelSegments: 2,
     steps: 1,
   });
-  slabGeo.translate(0, 0, -lane / 2 + bevel);
+  slabGeo.translate(0, 0, -back + bevel);
   const slabMesh = new THREE.Mesh(slabGeo, new THREE.MeshStandardMaterial({ color: style.dirt, roughness: 0.95 }));
   slabMesh.castShadow = true;
   slabMesh.receiveShadow = true;
@@ -58,14 +61,14 @@ export function buildTerrainMesh(
   turf.closePath();
   const tb = 0.12;
   const turfGeo = new THREE.ExtrudeGeometry(turf, {
-    depth: lane + 0.12 - tb * 2,
+    depth: front + back + 0.12 - tb * 2,
     bevelEnabled: true,
     bevelThickness: tb,
     bevelSize: tb,
     bevelOffset: -tb,
     bevelSegments: 2,
   });
-  turfGeo.translate(0, 0, -lane / 2 - 0.06 + tb);
+  turfGeo.translate(0, 0, -back - 0.06 + tb);
   const turfMesh = new THREE.Mesh(turfGeo, new THREE.MeshStandardMaterial({ color: style.top, roughness: 0.85 }));
   turfMesh.castShadow = true;
   turfMesh.receiveShadow = true;
