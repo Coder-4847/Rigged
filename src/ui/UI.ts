@@ -5,6 +5,8 @@ export type Dir = 'up' | 'down' | 'left' | 'right';
 export interface Screen {
   id: string;
   el: HTMLElement;
+  /** Called when the screen is hidden or covered. */
+  onHide?(): void;
   /** Called every time the screen becomes visible (refresh dynamic content here). */
   onShow?(): void;
   /** Escape / B / Backspace. Return true if handled (e.g. closed a sub-state). */
@@ -112,6 +114,7 @@ export class UI {
   }
 
   private hideEl(s: Screen): void {
+    s.onHide?.();
     this.W(s).classList.remove('shown');
     this.W(s).hidden = true;
   }

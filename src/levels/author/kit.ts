@@ -1,5 +1,6 @@
 import { LevelBuilder, LevelMeta } from '../builder';
 import type { DecoKind, LevelData, SurfaceType } from '../types';
+import type { VehicleId } from '../../config';
 
 /**
  * Segment kit: reusable, tuned level pieces. Every segment starts and ends on flat ground at the
@@ -422,9 +423,10 @@ export const K = {
     c.L.push({ type: 'oneway', x, y: gy(c) + 5, w });
   },
 
-  transform(c: Ctx, scale: number) {
+  /** Size-change / vehicle-swap pad. `vehicle: 'garage'` hands back the player's own vehicle. */
+  transform(c: Ctx, scale: number, vehicle?: VehicleId | 'garage') {
     flat(c, 18);
-    c.L.push({ type: 'transform', x: here(c), y: gy(c), scale, h: 8 });
+    c.L.push({ type: 'transform', x: here(c), y: gy(c), scale, h: 8, ...(vehicle ? { vehicle } : {}) });
     flat(c, 24);
   },
 
@@ -518,6 +520,8 @@ export interface LevelSpec {
   gravity?: number;
   boost?: boolean;
   manual?: boolean;
+  /** Force this vehicle for the whole level. */
+  vehicle?: VehicleId;
   /** Level body; the start pad and finish are added around it. */
   body: (c: Ctx) => void;
 }
@@ -535,6 +539,7 @@ export function makeLevel(s: LevelSpec): LevelData {
     gravity: s.gravity,
     boost: s.boost,
     manual: s.manual,
+    vehicle: s.vehicle,
   };
   const L = new LevelBuilder(meta);
   const c: Ctx = { L, id: s.id, sw: 0, world: s.world, gs: s.gravity ? 26 / Math.abs(s.gravity) : 1, since: 0, lastCpX: -1e9 };

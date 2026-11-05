@@ -6,6 +6,9 @@ import { hasLevel } from '../levels/registry';
 import { getLevel } from '../levels/registry';
 import { LEVELS_PER_WORLD, WORLD_COUNT, levelId, popcount } from '../core/Save';
 import { Action } from '../core/Input';
+import { DECALS, PAINTS, VEHICLES, VEHICLE_IDS, VehicleId } from '../config';
+import { GaragePreview } from './GaragePreview';
+import { allItems, stats } from '../core/Unlocks';
 import { DEFAULT_BINDINGS } from '../core/Input';
 
 const btn = (label: string, onClick: () => void, cls = '') =>
@@ -52,6 +55,7 @@ export function mainMenu(app: App): Screen {
       {},
       cont,
       btn('Levels', () => app.openWorlds()),
+      btn('Garage', () => app.ui.show('garage')),
       btn('Settings', () => app.ui.show('settings')),
       btn('Credits', () => app.ui.show('credits')),
     ),
@@ -152,6 +156,7 @@ export function levelSelect(app: App): Screen {
           },
           h('div.num', {}, String(id)),
           h('div.lname', {}, lv ? lv.name : 'Coming soon'),
+          lv?.vehicle && h('div.vbadge', { title: 'This level uses a set vehicle' }, `🚘 ${VEHICLES[lv.vehicle].name}`),
           lv && open
             ? h('div.tstars', {}, ...[0, 1, 2].map((i) => starIcon(!!(rec.stars & (1 << i)))))
             : h('div.tstars.lock', {}, lv ? '🔒' : ''),
@@ -183,7 +188,7 @@ export function pauseMenu(app: App): Screen {
     {},
     h('h2', {}, 'Paused'),
     h('div.sub'),
-    h('div.stack', {}, resume, btn('Restart level', () => app.restartFromPause()), btn('Settings', () => app.ui.show('settings')), btn('Level select', () => app.toLevelSelect()), btn('Main menu', () => app.toMainMenu())),
+    h('div.stack', {}, resume, btn('Restart level', () => app.restartFromPause()), btn('Garage', () => app.ui.show('garage')), btn('Settings', () => app.ui.show('settings')), btn('Level select', () => app.toLevelSelect()), btn('Main menu', () => app.toMainMenu())),
   );
   const sub = el.querySelector('.sub') as HTMLElement;
   return {
@@ -399,4 +404,124 @@ export function creditsScreen(app: App): Screen {
     h('div.row.center', {}, btn('Back', () => app.ui.back(), 'alt')),
   );
   return { id: 'credits', el };
+}
+
+// ---------------------------------------------------------------------------------------------
+
+export function garageScreen(app: App): Screen {
+  const canvas = h<HTMLCanvasElement>('canvas.gprev');
+  const preview = new GaragePreview(canvas);
+  const title = h('div.gname');
+  const blurb = h('div.gblurb');
+  const note = h('div.gnote');
+  const bars = h('div.gstats');
+  const vehicleRow = h('div.gveh');
+  const paintGrid = h('div.gpaints');
+  const decalRow = h('div.gdecals');
+  const g = () => app.save.data.garage;
+
+  const items = () => new Map(allItems(app.save).map((i) => [i.key, i]));
+
+  const select = (kind: 'v' | 'p' | 'd', value: string | number, el: HTMLElement) => {
+    const it = items().get(`${kind}:${value}`)!;
+    if (!it.unlocked) {
+      note.textContent = `🔒 ${it.name}: needs ${it.need}`;
+      app.shakeDeny(el);
+      return;
+    }
+    if (kind === 'v') g().vehicle = value as string;
+    if (kind === 'p') g().color = value as number;
+    if (kind === 'd') g().decal = value as string;
+    app.save.commit();
+    app.applyGarage();
+    refresh();
+    app.audio.chime(1);
+  };
+
+  const hint = (it: { name: string; need: string; unlocked: boolean }) => () => {
+    note.textContent = it.unlocked ? it.name : `🔒 ${it.name}: needs ${it.need}`;
+  };
+
+  const refresh = () => {
+    const sel = app.game.garage;
+    const map = items();
+    const def = VEHICLES[sel.vehicle];
+    title.textContent = def.name;
+    blurb.textContent = def.blurb;
+    preview.show(sel.vehicle, sel.color, sel.decal);
+    bars.replaceChildren(
+      ...Object.entries(stats(def)).map(([k, v]) => h('div.stat', {}, h('span', {}, k), h('div.bar', {}, h('i', { style: { width: `${Math.round(v * 100)}%` } })))),
+    );
+    vehicleRow.querySelectorAll<HTMLElement>('[data-v]').forEach((b) => {
+      const it = map.get(`v:${b.dataset.v}`)!;
+      b.classList.toggle('sel', b.dataset.v === sel.vehicle);
+      b.classList.toggle('locked', !it.unlocked);
+    });
+    paintGrid.querySelectorAll<HTMLElement>('[data-p]').forEach((b) => {
+      const it = map.get(`p:${b.dataset.p}`)!;
+      b.classList.toggle('sel', Number(b.dataset.p) === sel.color);
+      b.classList.toggle('locked', !it.unlocked);
+    });
+    decalRow.querySelectorAll<HTMLElement>('[data-d]').forEach((b) => {
+      const it = map.get(`d:${b.dataset.d}`)!;
+      b.classList.toggle('sel', b.dataset.d === sel.decal);
+      b.classList.toggle('locked', !it.unlocked);
+    });
+  };
+
+  const build = () => {
+    const map = items();
+    vehicleRow.replaceChildren(
+      ...VEHICLE_IDS.map((id: VehicleId) => {
+        const it = map.get(`v:${id}`)!;
+        const b = h<HTMLButtonElement>('button.vcard', { 'data-nav': true, 'data-v': id, 'aria-label': `${VEHICLES[id].name}${it.unlocked ? '' : ', locked'}`, onFocus: hint(it), onMouseover: hint(it) }, h('span.vdot', { style: { background: hex(VEHICLES[id].color) } }), h('span', {}, VEHICLES[id].name), !it.unlocked && h('span.lk', {}, '🔒'));
+        b.addEventListener('click', () => select('v', id, b));
+        return b;
+      }),
+    );
+    paintGrid.replaceChildren(
+      ...PAINTS.map((p) => {
+        const it = map.get(`p:${p.color}`)!;
+        const b = h<HTMLButtonElement>('button.swatch', { 'data-nav': true, 'data-p': p.color, 'aria-label': `${p.name}${it.unlocked ? '' : ', locked'}`, style: { background: hex(p.color) }, onFocus: hint(it), onMouseover: hint(it) }, !it.unlocked && h('span.lk', {}, '🔒'));
+        b.addEventListener('click', () => select('p', p.color, b));
+        return b;
+      }),
+    );
+    decalRow.replaceChildren(
+      ...DECALS.map((d) => {
+        const it = map.get(`d:${d.id}`)!;
+        const b = h<HTMLButtonElement>('button.chip', { 'data-nav': true, 'data-d': d.id, 'aria-label': `${d.name}${it.unlocked ? '' : ', locked'}`, onFocus: hint(it), onMouseover: hint(it) }, d.name, !it.unlocked && h('span.lk', {}, ' 🔒'));
+        b.addEventListener('click', () => select('d', d.id, b));
+        return b;
+      }),
+    );
+  };
+
+  const el = h(
+    'div.panel.garage',
+    {},
+    h('h1', {}, 'Garage'),
+    h(
+      'div.gcols',
+      {},
+      h('div.gstage', {}, canvas, title, blurb),
+      h('div.gside', {}, h('h3', {}, 'Vehicle'), vehicleRow, bars, h('h3', {}, 'Paint'), paintGrid, h('h3', {}, 'Decal'), decalRow, note),
+    ),
+    h('div.row.center', {}, btn('Back', () => app.ui.back(), 'alt')),
+  );
+  return {
+    id: 'garage',
+    el,
+    focus: () => vehicleRow.querySelector<HTMLElement>('.sel') ?? vehicleRow.querySelector('.vcard'),
+    onShow() {
+      preview.setReducedMotion(app.save.settings.reducedMotion);
+      build();
+      refresh();
+      note.textContent = `★ ${app.save.totalStars()} collected — more stars unlock more vehicles and paints`;
+      preview.start();
+    },
+    onHide() {
+      preview.stop();
+    },
+  };
 }

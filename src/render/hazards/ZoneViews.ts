@@ -274,7 +274,8 @@ export function transformView(p: TransformPad): HazardView {
   const d = p.d;
   const g = new THREE.Group();
   const grow = (d.scale ?? 1) > 1;
-  const col = grow ? 0xffa23a : 0x4ad8ff;
+  const swap = !!d.vehicle;
+  const col = swap ? 0xc77dff : grow ? 0xffa23a : 0x4ad8ff;
   const h = d.h ?? 5;
   for (const s of [-1, 1]) {
     const post = box(0.5, h + 0.6, 0.5, std(0x3a424d, { metal: 0.5 }), 0.1);
@@ -287,7 +288,7 @@ export function transformView(p: TransformPad): HazardView {
   const arrows: THREE.Mesh[] = [];
   for (let i = 0; i < 3; i++) {
     const a = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.55, 3), new THREE.MeshBasicMaterial({ color: col }));
-    a.rotation.z = grow ? 0 : Math.PI;
+    a.rotation.z = swap ? Math.PI / 2 : grow ? 0 : Math.PI;
     a.rotation.y = Math.PI / 2;
     arrows.push(a);
     g.add(a);

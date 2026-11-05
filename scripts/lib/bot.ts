@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { PhysicsWorld } from '../../src/physics/PhysicsWorld';
 import { Car } from '../../src/entities/Car';
 import { LevelPhysics } from '../../src/entities/LevelPhysics';
-import { VEHICLES } from '../../src/config';
+import { VEHICLES, VehicleId, scaleVehicle } from '../../src/config';
 import type { LevelData } from '../../src/levels/types';
 import { Autopilot } from '../../src/core/Autopilot';
 import type { InputState } from '../../src/core/Input';
@@ -46,6 +46,8 @@ export interface BotOptions {
   /** Allow respawning at checkpoints (like a player would). */
   retries?: number;
   traceEvery?: number;
+  /** Vehicle to drive when the level doesn't force one (default hatch). */
+  vehicle?: VehicleId;
   /** Delay before the very first attempt (for timing experiments). */
   firstWait?: number;
   /** Override the spawn point. */
@@ -59,10 +61,18 @@ export function runBot(level: LevelData, opts: BotOptions = {}): BotResult {
   const maxTime = opts.maxTime ?? 900;
   const pw = new PhysicsWorld();
   const lp = new LevelPhysics(pw, level);
-  const def = VEHICLES.hatch;
+  // Vehicle state follows the game: forced vehicle (or the one under test), then transform pads change it.
+  let curVehicle: VehicleId = level.vehicle ?? opts.vehicle ?? 'hatch';
+  let curScale = 1;
+  let cpState = { vehicle: curVehicle, scale: 1 };
+  const makeCar = (x: number, y: number, vel?: { x: number; y: number }): Car => {
+    const c = new Car(pw, scaleVehicle(VEHICLES[curVehicle], curScale), x, y, { antiFlip: level.antiFlip ?? 1, boostAllowed: !!level.boost });
+    if (vel) for (const b of [c.chassis, c.wheels[0], c.wheels[1]]) b.setLinearVelocity({ x: vel.x, y: vel.y } as never);
+    return c;
+  };
   let respawn: [number, number] = opts.from ?? level.spawn;
   let carCp = -1;
-  let car = new Car(pw, def, respawn[0], respawn[1], { antiFlip: level.antiFlip ?? 1, boostAllowed: !!level.boost });
+  let car = makeCar(respawn[0], respawn[1]);
   lp.setCar(car);
   const inp: InputState = { throttle: 0, brake: 0, tilt: 0, boost: false, restart: false, pause: false };
   let deaths = 0;
@@ -93,6 +103,23 @@ export function runBot(level: LevelData, opts: BotOptions = {}): BotResult {
     car.update(dt, inp);
     lp.update(dt);
     pw.step(dt);
+    if (lp.pendingTransform && !car.crashed) {
+      // transform pad: rebuild the car in place (same as Game.applyTransform)
+      const tr = lp.pendingTransform;
+      lp.pendingTransform = null;
+      const q = car.chassis.getPosition();
+      const v = car.chassis.getLinearVelocity();
+      const reqVehicle = tr.vehicle === 'garage' ? (level.vehicle ?? opts.vehicle ?? 'hatch') : tr.vehicle;
+      const changedVehicle = !!reqVehicle && reqVehicle !== curVehicle;
+      if (changedVehicle || tr.scale !== curScale) {
+        const lift = changedVehicle ? 0.8 : Math.max(0, (tr.scale - curScale) * 0.6);
+        car.destroy();
+        if (reqVehicle) curVehicle = reqVehicle as VehicleId;
+        curScale = tr.scale;
+        car = makeCar(q.x, q.y + lift + 0.1, { x: v.x, y: Math.max(0, v.y) });
+        lp.setCar(car);
+      }
+    }
 
     opts.onStep?.(car, lp, t);
     {
@@ -115,6 +142,7 @@ export function runBot(level: LevelData, opts: BotOptions = {}): BotResult {
       if (k > carCp && p.x > c[0]) {
         carCp = k;
         respawn = [c[0], c[1] + 1.3];
+        cpState = { vehicle: curVehicle, scale: curScale };
         pending.forEach((s) => collected.add(s));
         pending.clear();
       }
@@ -134,7 +162,9 @@ export function runBot(level: LevelData, opts: BotOptions = {}): BotResult {
       pending.clear();
       car.destroy();
       lp.reset();
-      car = new Car(pw, def, respawn[0], respawn[1], { antiFlip: level.antiFlip ?? 1, boostAllowed: !!level.boost });
+      curVehicle = cpState.vehicle;
+      curScale = cpState.scale;
+      car = makeCar(respawn[0], respawn[1]);
       lp.setCar(car);
       pilot.reset();
       attempt++;

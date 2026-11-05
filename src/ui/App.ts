@@ -8,7 +8,8 @@ import { TouchControls } from './Touch';
 import { PadNav } from './PadNav';
 import { adaptHint, glyph } from './Prompts';
 import type { Device } from '../core/Input';
-import { creditsScreen, levelSelect, mainMenu, pauseMenu, settingsScreen, worldSelect } from './screens';
+import { sanitizeGarage, unlockedKeys, newlyUnlocked } from '../core/Unlocks';
+import { creditsScreen, garageScreen, levelSelect, mainMenu, pauseMenu, settingsScreen, worldSelect } from './screens';
 
 /**
  * Application shell: owns save data, the game runtime and the menu screens, and wires the flow
@@ -37,7 +38,7 @@ export class App {
     this.game.input.addSource(this.touch, 'touch');
     document.body.appendChild(h('div.rotate-prompt', {}, h('div', {}, h('div.big-ico', {}, '📱'), 'Rotate your device', h('small', {}, 'RIGGED plays in landscape'))));
 
-    for (const make of [mainMenu, worldSelect, levelSelect, pauseMenu, settingsScreen, creditsScreen]) this.ui.register(make(this));
+    for (const make of [mainMenu, worldSelect, levelSelect, garageScreen, pauseMenu, settingsScreen, creditsScreen]) this.ui.register(make(this));
 
     this.ui.onCue = (c) => (c === 'hover' ? this.audio.hover() : c === 'click' ? this.audio.click() : this.audio.hover());
     this.ui.onChange = () => {
@@ -47,6 +48,7 @@ export class App {
 
     this.game.onPauseRequest = () => this.pauseGame();
     this.game.onComplete = (r) => this.showComplete(r);
+    this.game.onStuck = () => this.toast('Stuck? Pause → Garage to try a different vehicle');
     this.game.onQualityDrop = (q) => this.toast(`Frame rate was low — graphics set to ${q}`);
     // --- input devices: glyph prompts, hot-plug, controller menus
     const input = this.game.input;
@@ -91,6 +93,14 @@ export class App {
 
   applySettings(): void {
     this.game.applySettings(this.save.settings);
+    this.applyGarage();
+  }
+
+  /** Push the (validated) garage selection into the game. */
+  applyGarage(): void {
+    const g = sanitizeGarage(this.save);
+    Object.assign(this.save.data.garage, g);
+    this.game.garage = g;
   }
 
   /** Called whenever the player switches between keyboard / gamepad / touch. */
@@ -235,6 +245,8 @@ export class App {
   resume(): void {
     this.ui.closeAll();
     this.game.resume();
+    // Changed vehicle/paint in the garage while paused → rebuild the car (from the last checkpoint).
+    if (this.game.garageChanged()) this.game.restart(false);
   }
 
   restartFromPause(): void {
@@ -247,11 +259,14 @@ export class App {
 
   private showComplete(r: CompleteResult): void {
     const wasOpen = this.save.worldUnlocked(worldOf(r.id) + 1);
+    const before = unlockedKeys(this.save);
     const res = this.save.complete(r.id, r.time, r.starMask, r.deaths);
     const w = worldOf(r.id);
     const unlockedNow = !wasOpen && this.save.worldUnlocked(w + 1) && hasLevel(levelId(w + 1, 1));
     const next = r.id + 1;
     const hasNext = hasLevel(next) && next < 900 && this.save.levelUnlocked(next);
+    const fresh = newlyUnlocked(this.save, before);
+    if (fresh.length) setTimeout(() => this.toast(`🔓 Unlocked: ${fresh.slice(0, 3).map((f) => f.name).join(', ')}${fresh.length > 3 ? ` +${fresh.length - 3}` : ''}`), 1800);
     const note = unlockedNow ? `World ${w + 1} unlocked — ${THEMES[w + 1]?.name ?? ''}!` : res.newStars > 0 ? `+${res.newStars} new star${res.newStars > 1 ? 's' : ''}` : '';
     this.game.hud.showComplete(
       { time: r.time, par: r.par, stars: r.stars, deaths: r.deaths, hasNext, name: r.name, newBest: res.newBest && !res.first, note },

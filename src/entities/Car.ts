@@ -165,7 +165,8 @@ export class Car implements ContactOwner {
     }
     if (!isSolid(other)) return;
     if (self.kind === 'roof') {
-      if (other.surface !== 'oneway') this.crash('roof');
+      // Roof-vs-terrain/platform is the crash; a loose prop (crate, TNT, domino) resting on you is just a bump.
+      if (other.surface !== 'oneway' && other.kind !== 'prop') this.crash('roof');
     } else if (self.kind === 'wheel') {
       this.wheelContacts[self.index ?? 0]++;
     } else if (self.kind === 'chassis') {
@@ -269,6 +270,17 @@ export class Car implements ContactOwner {
         torque = m.torque * 0.8;
       }
     }
+    // Torquey vehicles: drive torque follows effective gravity (less weight = less traction = less torque usable).
+    if (def.wheelieGuard && !braking) {
+      const gEff = Math.abs(this.pw.world.getGravity().y * ch.getGravityScale());
+      torque *= Math.max(0.3, Math.min(1, gEff / Math.abs(CONFIG.physics.gravity)));
+    }
+    // Wheelie control: while the nose is rotating up on the ground, back the drive torque off.
+    // (a real wheelie = rear wheel down, front wheel in the air; both wheels on a ramp is just climbing)
+    if (def.wheelieGuard && this.wheelContacts[0] > 0 && this.wheelContacts[1] === 0 && !braking && !flipped) {
+      const pitchNow = Math.atan2(sin, cos);
+      if (pitchNow > 0.1 && ch.getAngularVelocity() > 0.3) torque *= Math.max(0.03, 1 - (ch.getAngularVelocity() - 0.3) / 0.9);
+    }
     this.drive += ((gas > 0.05 ? gas : brk > 0.05 ? -brk : 0) - this.drive) * Math.min(1, dt * 10);
     for (let i = 0; i < 2; i++) {
       const j = this.joints[i];
@@ -302,7 +314,13 @@ export class Car implements ContactOwner {
 
     // ---- Landing grace: briefly damp rotation so awkward landings don't tumble ----
     if (this.grounded && this.sinceLanded < 0.25) {
-      ch.applyTorque(-w * this.mass * 1.4, true);
+      ch.applyTorque(-w * this.mass * (def.landGrace ?? 1.4), true);
+    }
+
+    // ---- Wheelie guard: resist nose-up pitch rate while driving on the ground ----
+    if (def.wheelieGuard && this.wheelContacts[0] > 0 && this.wheelContacts[1] === 0 && !flipped) {
+      const pitch = Math.atan2(sin, cos);
+      if (pitch > 0.12 && w > 0.4) ch.applyTorque(-w * this.mass * def.wheelieGuard, true);
     }
 
     // ---- Anti-flip assist ----

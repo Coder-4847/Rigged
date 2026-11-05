@@ -37,12 +37,12 @@ export class SeesawBody implements Behavior {
       type: 'dynamic',
       position: new Vec2(this.x, this.y),
       angle: this.rest,
-      angularDamping: 2.6,
+      angularDamping: 4.5,
       allowSleep: false,
     });
     this.plank.createFixture({
       shape: new Box(this.width / 2, 0.2),
-      density: 1.4,
+      density: 3.2, // heavy plank = slow, gentle tipping even under a monster truck
       friction: 1.4,
       restitution: 0,
       filterCategoryBits: Cat.PROP,

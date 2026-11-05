@@ -136,43 +136,166 @@ export interface VehicleDef {
   downforce: number;
   /** Anti-flip assist base strength (0..1). Levels scale this down in harder worlds. */
   antiFlip: number;
+  /** Damps nose-up rotation while grounded (stops very torquey vehicles wheelie-flipping, esp. in low gravity). */
+  wheelieGuard?: number;
+  /** Rotation damping right after landing (default 1.4): higher = fewer landing flips. */
+  landGrace?: number;
   /** Extra forward push when boosting (m/s²). */
   boostAccel: number;
   /** Paint area default colour. */
   color: number;
+  /** Visual style (the model is built from this + the physical dims above). */
+  look: VehicleLook;
+  /** One-line personality shown in the garage. */
+  blurb: string;
 }
 
-export const VEHICLES: Record<'hatch', VehicleDef> = {
+export interface VehicleLook {
+  /** Cabin shape: sloped hatch glass, boxy 4x4 cab, open roll-cage, low fastback. */
+  cabin: 'slope' | 'box' | 'open' | 'fast';
+  /** Half body width (z). */
+  halfZ: number;
+  tireW: number;
+  spoiler?: boolean;
+  rack?: boolean;
+  spare?: boolean;
+  bullbar?: boolean;
+  /** Long hood stripe + scoop (muscle). */
+  scoop?: boolean;
+  /** Oversized round headlights (mini). */
+  bigLights?: boolean;
+  /** Chunky tread blocks. */
+  knobby?: boolean;
+}
+
+export const VEHICLE_IDS: VehicleId[] = ['hatch', 'jeep', 'buggy', 'monster', 'muscle', 'mini'];
+
+export const VEHICLES: Record<VehicleId, VehicleDef> = {
   hatch: {
     id: 'hatch',
     name: 'Blockhead',
+    blurb: 'Balanced hatchback. Forgiving, honest, a little cheeky.',
     body: { hx: 1.75, hy: 0.38, cy: -0.05, density: 1.6 },
     cabin: { hx: 0.95, hy: 0.36, cx: -0.25, cy: 0.69, density: 0.35 },
-    wheel: {
-      radius: 0.52,
-      rearX: -1.2,
-      frontX: 1.2,
-      anchorY: -0.28,
-      density: 1.1,
-      friction: 1.5,
-      frontFriction: 1.3,
-    },
+    wheel: { radius: 0.52, rearX: -1.2, frontX: 1.2, anchorY: -0.28, density: 1.1, friction: 1.5, frontFriction: 1.3 },
     suspension: { hz: 4.6, damping: 0.62, travel: 0.35 },
-    motor: {
-      torque: 44,
-      maxSpeed: 19,
-      reverseFrac: 0.55,
-      brakeTorque: 60,
-      idleTorque: 3,
-      drive: [1, 1],
-    },
+    motor: { torque: 44, maxSpeed: 19, reverseFrac: 0.55, brakeTorque: 60, idleTorque: 3, drive: [1, 1] },
     air: { tilt: 15, maxAngVel: 4.2, damping: 0.6 },
     downforce: 0.35,
     antiFlip: 1,
     boostAccel: 14,
     color: 0xe8553a,
+    look: { cabin: 'slope', halfZ: 0.85, tireW: 0.46, spoiler: true },
+  },
+  jeep: {
+    id: 'jeep',
+    name: 'Trailhound',
+    blurb: '4x4 with high clearance and a soft ride. Grips everything and climbs like a goat.',
+    body: { hx: 1.7, hy: 0.45, cy: 0.05, density: 1.9 },
+    cabin: { hx: 1.1, hy: 0.55, cx: -0.1, cy: 0.95, density: 0.4 },
+    wheel: { radius: 0.62, rearX: -1.25, frontX: 1.25, anchorY: -0.3, density: 1.2, friction: 1.9, frontFriction: 1.2 },
+    suspension: { hz: 3.9, damping: 0.7, travel: 0.45 },
+    motor: { torque: 74, maxSpeed: 18.6, reverseFrac: 0.6, brakeTorque: 85, idleTorque: 4, drive: [1, 1] },
+    air: { tilt: 24, maxAngVel: 3.6, damping: 0.7 },
+    downforce: 0.4,
+    antiFlip: 1.2,
+    boostAccel: 14,
+    color: 0x5d8f3c,
+    look: { cabin: 'box', halfZ: 0.92, tireW: 0.52, rack: true, spare: true, bullbar: true, knobby: true },
+  },
+  buggy: {
+    id: 'buggy',
+    name: 'Dune Skipper',
+    blurb: 'Feather-light and bouncy. Great in the air, twitchy on the ground.',
+    body: { hx: 1.55, hy: 0.3, cy: -0.12, density: 1.7 },
+    cabin: { hx: 0.7, hy: 0.45, cx: -0.1, cy: 0.62, density: 0.12 },
+    wheel: { radius: 0.6, rearX: -1.15, frontX: 1.25, anchorY: -0.2, density: 0.8, friction: 1.35, frontFriction: 1.2 },
+    suspension: { hz: 5.2, damping: 0.55, travel: 0.5 },
+    motor: { torque: 46, maxSpeed: 20.5, reverseFrac: 0.55, brakeTorque: 55, idleTorque: 3, drive: [1, 1] },
+    air: { tilt: 26, maxAngVel: 5.2, damping: 0.4 },
+    downforce: 0.5,
+    antiFlip: 1.2,
+    landGrace: 2.6,
+    boostAccel: 16,
+    color: 0x38b6ff,
+    look: { cabin: 'open', halfZ: 0.88, tireW: 0.5, knobby: true },
+  },
+  monster: {
+    id: 'monster',
+    name: 'Crushalot',
+    blurb: 'Huge wheels, huge weight. Steamrolls bumps, slow to rotate in the air.',
+    body: { hx: 1.9, hy: 0.55, cy: 0.35, density: 2.2 },
+    cabin: { hx: 1.0, hy: 0.6, cx: -0.1, cy: 1.25, density: 0.5 },
+    wheel: { radius: 1.0, rearX: -1.4, frontX: 1.4, anchorY: -0.5, density: 1.3, friction: 2.0, frontFriction: 1.1 },
+    suspension: { hz: 3.1, damping: 0.5, travel: 0.7 },
+    motor: { torque: 250, maxSpeed: 18.2, reverseFrac: 0.6, brakeTorque: 190, idleTorque: 8, drive: [1, 1] },
+    air: { tilt: 44, maxAngVel: 3.7, damping: 1.4 },
+    downforce: 0.55,
+    antiFlip: 2.0,
+    landGrace: 3.2,
+    wheelieGuard: 4,
+    boostAccel: 12,
+    color: 0xffb52e,
+    look: { cabin: 'box', halfZ: 1.05, tireW: 0.8, bullbar: true, knobby: true },
+  },
+  muscle: {
+    id: 'muscle',
+    name: 'Redline',
+    blurb: 'Rear-wheel-drive and fast. Stiff, twitchy, wheelspins if you stomp it.',
+    body: { hx: 1.95, hy: 0.34, cy: -0.08, density: 1.7 },
+    cabin: { hx: 0.85, hy: 0.3, cx: -0.55, cy: 0.58, density: 0.35 },
+    wheel: { radius: 0.5, rearX: -1.35, frontX: 1.4, anchorY: -0.26, density: 1.2, friction: 1.25, frontFriction: 0.9 },
+    suspension: { hz: 6.5, damping: 0.8, travel: 0.3 },
+    motor: { torque: 62, maxSpeed: 22.5, reverseFrac: 0.5, brakeTorque: 75, idleTorque: 3, drive: [1, 0.15] },
+    air: { tilt: 13, maxAngVel: 4.6, damping: 0.5 },
+    downforce: 0.55,
+    antiFlip: 0.8,
+    boostAccel: 16,
+    color: 0x2f55e8,
+    look: { cabin: 'fast', halfZ: 0.88, tireW: 0.5, spoiler: true, scoop: true },
+  },
+  mini: {
+    id: 'mini',
+    name: 'Pocket Rocket',
+    blurb: 'Tiny, short wheelbase, spins like a top. Fits where nothing else does.',
+    body: { hx: 1.25, hy: 0.32, cy: -0.05, density: 1.5 },
+    cabin: { hx: 0.72, hy: 0.34, cx: -0.1, cy: 0.6, density: 0.35 },
+    wheel: { radius: 0.4, rearX: -0.8, frontX: 0.85, anchorY: -0.22, density: 1.0, friction: 1.4, frontFriction: 1.2 },
+    suspension: { hz: 5.0, damping: 0.6, travel: 0.28 },
+    motor: { torque: 22, maxSpeed: 17.5, reverseFrac: 0.55, brakeTorque: 30, idleTorque: 2, drive: [1, 1] },
+    air: { tilt: 6.5, maxAngVel: 5.4, damping: 0.5 },
+    downforce: 0.3,
+    antiFlip: 0.9,
+    boostAccel: 14,
+    color: 0xffd23a,
+    look: { cabin: 'slope', halfZ: 0.72, tireW: 0.36, bigLights: true },
   },
 };
+
+/** Paint colours (unlocked by stars). */
+export const PAINTS: Array<{ color: number; name: string; stars: number }> = [
+  { color: 0xe8553a, name: 'Brick', stars: 0 },
+  { color: 0x38b6ff, name: 'Sky', stars: 4 },
+  { color: 0xffd23a, name: 'Sunny', stars: 8 },
+  { color: 0x6fcf4a, name: 'Lime', stars: 14 },
+  { color: 0xff8a3d, name: 'Tangerine', stars: 20 },
+  { color: 0xb06bff, name: 'Grape', stars: 28 },
+  { color: 0x2ec4b6, name: 'Teal', stars: 38 },
+  { color: 0xff6fa8, name: 'Bubblegum', stars: 50 },
+  { color: 0xf2f2f2, name: 'Frost', stars: 64 },
+  { color: 0x2a2f38, name: 'Midnight', stars: 80 },
+  { color: 0xd9a520, name: 'Gold', stars: 110 },
+  { color: 0x9aa6b4, name: 'Chrome', stars: 150 },
+];
+
+export const DECALS: Array<{ id: string; name: string; world: number }> = [
+  { id: 'none', name: 'Plain', world: 0 },
+  { id: 'stripes', name: 'Racing stripes', world: 2 },
+  { id: 'checker', name: 'Checkered band', world: 4 },
+  { id: 'flames', name: 'Flames', world: 6 },
+  { id: 'stars', name: 'Star burst', world: 8 },
+  { id: 'camo', name: 'Camo', world: 10 },
+];
 
 /**
  * Uniformly scale a vehicle (transform pads). Torques scale with k³ (traction ∝ mass·r) and air

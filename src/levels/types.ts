@@ -22,7 +22,7 @@ export type EntityData =
   | { type: 'bounce'; x: number; y: number; w?: number; power?: number; vent?: boolean }
   | { type: 'cannon'; x: number; y: number; angle: number; power?: number }
   | { type: 'oneway'; x: number; y: number; w: number }
-  | { type: 'transform'; x: number; y: number; scale?: number; vehicle?: VehicleId; h?: number }
+  | { type: 'transform'; x: number; y: number; scale?: number; /** a vehicle, or 'garage' = back to the player's own pick */ vehicle?: VehicleId | 'garage'; h?: number }
   // --- movers
   | { type: 'platform'; x: number; y: number; w: number; h?: number; x2: number; y2: number; period: number; phase?: number }
   | { type: 'gear'; x: number; y: number; r: number; speed: number; teeth?: number }
@@ -54,7 +54,8 @@ export interface LevelData {
   name: string;
   /** 1..10 */
   world: number;
-  vehicle: VehicleId;
+  /** If set, the level forces this vehicle; otherwise the player's garage choice is used. */
+  vehicle?: VehicleId;
   /** Gravity (m/s², negative). Defaults to CONFIG.physics.gravity. */
   gravity?: number;
   /** 0..1 anti-flip assist (fades out in later worlds). */

@@ -27,7 +27,68 @@ const MAT = {
   cap: new THREE.MeshStandardMaterial({ color: 0x2b6cb0, roughness: 0.7, vertexColors: true }),
 };
 
-/** Shared (static) geometries per vehicle shape would go here; the hatch builds its own. */
+const decalCache = new Map<string, THREE.CanvasTexture>();
+/** Side-panel decal art drawn on a canvas (transparent background). */
+function decalTexture(id: string): THREE.CanvasTexture {
+  let t = decalCache.get(id);
+  if (t) return t;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 160;
+  const g = c.getContext('2d')!;
+  if (id === 'checker') {
+    const n = 16;
+    for (let y = 0; y < 2; y++) for (let x = 0; x < n; x++) {
+      g.fillStyle = (x + y) % 2 ? '#f6f2e6' : '#1c2028';
+      g.fillRect((x * 512) / n, 54 + y * 26, 512 / n, 26);
+    }
+  } else if (id === 'flames') {
+    const grad = g.createLinearGradient(0, 0, 0, 160);
+    grad.addColorStop(0, '#ffd23a');
+    grad.addColorStop(1, '#ff4a1e');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(512, 160);
+    for (let i = 0; i <= 6; i++) {
+      const x = 512 - i * 78;
+      g.lineTo(x - 20, 160 - 40 - (i % 2) * 36);
+      g.quadraticCurveTo(x - 40, 160 - 100 - (i % 2) * 20, x - 78, 160);
+    }
+    g.lineTo(0, 160);
+    g.closePath();
+    g.fill();
+  } else if (id === 'stars') {
+    g.fillStyle = '#f6f2e6';
+    for (let i = 0; i < 5; i++) {
+      const cx = 70 + i * 92;
+      const cy = 80 + (i % 2 ? 22 : -14);
+      g.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const a = -Math.PI / 2 + (k * Math.PI) / 5;
+        const rr = k % 2 ? 14 : 34;
+        g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+      }
+      g.closePath();
+      g.fill();
+    }
+  } else if (id === 'camo') {
+    const cols = ['#4a5a30', '#2f3a22', '#7a7a4a'];
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+    for (let i = 0; i < 26; i++) {
+      g.fillStyle = cols[i % 3];
+      g.beginPath();
+      g.ellipse(rnd() * 512, rnd() * 160, 30 + rnd() * 50, 14 + rnd() * 26, rnd() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  decalCache.set(id, t);
+  return t;
+}
+
+/** Procedural toy-block vehicle model: shape comes from the VehicleDef's `look`. */
 export class CarModel {
   /** Everything for the body (chassis transform applied here). */
   readonly body = new THREE.Group();
@@ -45,24 +106,27 @@ export class CarModel {
   private headSpot?: THREE.SpotLight;
   private headBeams: THREE.Mesh[] = [];
   private driver!: THREE.Object3D;
+  private decal: string;
 
   // visual dynamics
   private squash = 0;
   private squashV = 0;
   private lean = 0;
   private bottom: number;
-  private halfZ = 0.85;
+  private halfZ: number;
   private wheelZ: number;
   private hubLocal = new THREE.Vector3();
   /** Uniform size multiplier (transform pads). The model is built at base size and scaled. */
   k = 1;
 
-  constructor(readonly def: VehicleDef, color = def.color) {
+  constructor(readonly def: VehicleDef, color = def.color, decal = "none") {
+    this.decal = decal;
+    this.halfZ = def.look.halfZ;
     this.paint = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.08, vertexColors: true });
     this.tailMat = new THREE.MeshStandardMaterial({ color: 0x7a1010, emissive: 0xff2a1a, emissiveIntensity: 0.5, roughness: 0.4 });
     this.headMat = new THREE.MeshStandardMaterial({ color: 0xfff2c4, emissive: 0xffe9a6, emissiveIntensity: 0.9, roughness: 0.3 });
     this.bottom = def.body.cy - def.body.hy;
-    this.wheelZ = this.halfZ + 0.22;
+    this.wheelZ = this.halfZ + def.look.tireW / 2 - 0.01;
 
     this.squashPivot.position.y = this.bottom;
     this.inner.position.y = -this.bottom;
@@ -102,59 +166,69 @@ export class CarModel {
     return new THREE.Mesh(geo, mat);
   }
 
+  /** Dark tube helper for cages / racks / bars. */
+  private tube(w: number, h: number, d: number, x: number, y: number, z: number): THREE.Mesh {
+    const m = this.mesh(block(w, h, d, Math.min(w, h, d) * 0.4, 1), MAT.dark);
+    m.position.set(x, y, z);
+    return m;
+  }
+
   private buildBody(): void {
     const d = this.def;
+    const L = d.look;
     const hz = this.halfZ;
     const bw = hz * 2;
+    const bodyTop = d.body.cy + d.body.hy;
 
-    // Lower chassis slab.
-    this.part(this.mesh(block(d.body.hx * 2, d.body.hy * 2, bw, 0.12), this.paint), 0, d.body.cy, 0, d.body.hx, d.body.hy);
+    // Lower chassis slab (decals ride on it).
+    const slab = this.part(this.mesh(block(d.body.hx * 2, d.body.hy * 2, bw, 0.12), this.paint), 0, d.body.cy, 0, d.body.hx, d.body.hy);
+    this.addDecal(slab as THREE.Mesh, this.decal);
 
-    // Hood (slightly raised, sloped front) and rear hatch lip.
-    this.part(
-      this.mesh(
-        profile(
-          [
-            [-0.55, 0],
-            [0.55, 0],
-            [0.5, 0.1],
-            [-0.5, 0.22],
-          ],
-          bw * 0.96,
-          0.04,
-        ),
-        this.paint,
-      ),
-      d.body.hx - 0.62,
-      d.body.cy + d.body.hy + 0.0,
-      0,
-      0.55,
-      0.1,
-    );
-    this.part(this.mesh(block(0.5, 0.16, bw * 0.94, 0.05), this.paint), -d.body.hx + 0.3, d.body.cy + d.body.hy + 0.06, 0, 0.25, 0.08);
+    // Hood + tail lip depend on the style.
+    if (L.cabin === 'box') {
+      this.part(this.mesh(block(d.body.hx - d.cabin.hx - 0.1, 0.2, bw * 0.96, 0.05), this.paint), d.body.hx - (d.body.hx - d.cabin.hx) / 2 + 0.1, bodyTop + 0.1, 0, 0.5, 0.1);
+    } else if (L.cabin !== 'open') {
+      const hl = L.cabin === 'fast' ? 1.5 : 1.1;
+      this.part(this.mesh(profile([[-hl / 2, 0], [hl / 2, 0], [hl / 2 - 0.05, 0.1], [-hl / 2 + 0.05, L.cabin === 'fast' ? 0.14 : 0.22]], bw * 0.96, 0.04), this.paint), d.body.hx - hl / 2 - 0.05, bodyTop, 0, hl / 2, 0.1);
+      this.part(this.mesh(block(0.5, 0.16, bw * 0.94, 0.05), this.paint), -d.body.hx + 0.3, bodyTop + 0.06, 0, 0.25, 0.08);
+    }
 
-    // Cabin: paint shell + glass greenhouse.
+    // Cabin.
     const cx = d.cabin.cx;
-    const cyb = d.cabin.cy - d.cabin.hy; // cabin bottom
+    const cyb = d.cabin.cy - d.cabin.hy;
     const top = d.cabin.hy * 2;
-    const cabinPts: Array<[number, number]> = [
-      [-d.cabin.hx, 0],
-      [d.cabin.hx + 0.02, 0],
-      [d.cabin.hx - 0.42, top],
-      [-d.cabin.hx + 0.12, top],
-    ];
-    this.part(this.mesh(profile(cabinPts, bw * 0.84, 0.05), this.paint), cx, cyb, 0, d.cabin.hx, d.cabin.hy);
-    // Glass: inset profile, wider than the shell so it shows on both sides.
-    const m = 0.1;
-    const glassPts: Array<[number, number]> = [
-      [-d.cabin.hx + m + 0.02, 0.07],
-      [d.cabin.hx - m + 0.06, 0.07],
-      [d.cabin.hx - 0.42 - m * 0.2, top - 0.1],
-      [-d.cabin.hx + 0.12 + m * 0.4, top - 0.1],
-    ];
-    this.part(this.mesh(profile(glassPts, bw * 0.84 + 0.04, 0.02, 0.9), MAT.glass), cx, cyb, 0, d.cabin.hx * 0.9, d.cabin.hy * 0.8);
+    const hx = d.cabin.hx;
+    let driverY = cyb + 0.3;
+    if (L.cabin === 'open') {
+      // Roll cage: four posts, roof hoops and a bucket seat, driver in the open.
+      const cage = new THREE.Group();
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) cage.add(this.tube(0.1, top, 0.1, sx * hx * 0.85, top / 2, sz * (hz - 0.2)));
+      for (const sz of [-1, 1]) cage.add(this.tube(hx * 1.9, 0.1, 0.1, 0, top, sz * (hz - 0.2)));
+      cage.add(this.tube(0.1, 0.1, (hz - 0.2) * 2, hx * 0.85, top, 0), this.tube(0.1, 0.1, (hz - 0.2) * 2, -hx * 0.85, top, 0));
+      const seat = this.mesh(block(0.5, 0.5, 0.7, 0.08, 0.8), MAT.dark);
+      seat.position.set(-hx * 0.2, 0.25, 0);
+      cage.add(seat);
+      this.part(cage, cx, cyb, 0, hx, d.cabin.hy);
+      driverY = cyb + 0.45;
+    } else {
+      let pts: Array<[number, number]>;
+      let gl: Array<[number, number]>;
+      const m = 0.1;
+      if (L.cabin === 'box') {
+        pts = [[-hx, 0], [hx, 0], [hx - 0.06, top], [-hx + 0.04, top]];
+        gl = [[-hx + m, 0.08], [hx - m, 0.08], [hx - m - 0.04, top - 0.12], [-hx + m + 0.02, top - 0.12]];
+      } else if (L.cabin === 'fast') {
+        pts = [[-hx, 0], [hx, 0], [hx * 0.4, top], [-hx * 0.5, top], [-hx, top * 0.4]];
+        gl = [[-hx + 0.25, 0.06], [hx - 0.18, 0.06], [hx * 0.4 - 0.1, top - 0.08], [-hx * 0.5 + 0.05, top - 0.08], [-hx + 0.2, top * 0.4]];
+      } else {
+        pts = [[-hx, 0], [hx + 0.02, 0], [hx - 0.42, top], [-hx + 0.12, top]];
+        gl = [[-hx + m + 0.02, 0.07], [hx - m + 0.06, 0.07], [hx - 0.42 - m * 0.2, top - 0.1], [-hx + 0.12 + m * 0.4, top - 0.1]];
+      }
+      this.part(this.mesh(profile(pts, bw * 0.84, 0.05), this.paint), cx, cyb, 0, hx, d.cabin.hy);
+      this.part(this.mesh(profile(gl, bw * 0.84 + 0.04, 0.02, 0.9), MAT.glass), cx, cyb, 0, hx * 0.9, d.cabin.hy * 0.8);
+    }
 
-    // Driver (cartoon head with cap) visible through the glass.
+    // Driver head (cartoon, with cap) visible through the glass / in the open.
     const head = new THREE.Group();
     head.add(this.mesh(block(0.38, 0.38, 0.38, 0.1, 0.9), MAT.skin));
     const cap = this.mesh(block(0.42, 0.14, 0.42, 0.05, 0.9), MAT.cap);
@@ -162,30 +236,57 @@ export class CarModel {
     const brim = this.mesh(block(0.22, 0.05, 0.38, 0.02, 0.9), MAT.cap);
     brim.position.set(0.28, 0.14, 0);
     head.add(cap, brim);
-    this.driver = this.part(head, cx + 0.05, cyb + 0.3, 0.12, 0.2, 0.2, { isHead: true });
+    this.driver = this.part(head, cx + 0.05, driverY, 0.12, 0.2, 0.2, { isHead: true });
 
     // Bumpers.
     this.part(this.mesh(block(0.2, 0.24, bw * 1.02, 0.07), MAT.dark), d.body.hx + 0.04, d.body.cy - 0.15, 0, 0.1, 0.12);
     this.part(this.mesh(block(0.2, 0.24, bw * 1.02, 0.07), MAT.dark), -d.body.hx - 0.04, d.body.cy - 0.15, 0, 0.1, 0.12);
 
-    // Headlights + taillights (emissive).
+    // Head/tail lights (mini gets big round-ish "eyes").
+    const lw = L.bigLights ? 0.34 : 0.2;
+    const lz = L.bigLights ? 0.32 : 0.3;
     for (const s of [-1, 1]) {
-      this.part(this.mesh(block(0.1, 0.2, 0.3, 0.04, 1), this.headMat), d.body.hx + 0.02, d.body.cy + 0.08, s * 0.55, 0.05, 0.1);
-      this.part(this.mesh(block(0.1, 0.18, 0.3, 0.04, 1), this.tailMat), -d.body.hx - 0.01, d.body.cy + 0.08, s * 0.55, 0.05, 0.09);
+      this.part(this.mesh(block(0.1, lw, lz, 0.05, 1), this.headMat), d.body.hx + 0.02, d.body.cy + 0.08 + (L.bigLights ? 0.06 : 0), s * (hz * 0.64), 0.05, lw / 2);
+      this.part(this.mesh(block(0.1, 0.18, 0.3, 0.04, 1), this.tailMat), -d.body.hx - 0.01, d.body.cy + 0.08, s * (hz * 0.64), 0.05, 0.09);
     }
 
-    // Spoiler on posts.
-    const spoiler = new THREE.Group();
-    spoiler.add(this.mesh(block(0.5, 0.07, bw * 0.92, 0.03, 0.9), MAT.dark));
-    for (const s of [-1, 1]) {
-      const post = this.mesh(block(0.07, 0.2, 0.07, 0.02, 0.9), MAT.dark);
-      post.position.set(0.05, -0.12, s * 0.5);
-      spoiler.add(post);
+    // Per-style extras.
+    if (L.spoiler) {
+      const spoiler = new THREE.Group();
+      spoiler.add(this.mesh(block(0.5, 0.07, bw * 0.92, 0.03, 0.9), MAT.dark));
+      for (const s of [-1, 1]) {
+        const post = this.mesh(block(0.07, 0.2, 0.07, 0.02, 0.9), MAT.dark);
+        post.position.set(0.05, -0.12, s * (hz * 0.6));
+        spoiler.add(post);
+      }
+      this.part(spoiler, -d.body.hx + 0.2, bodyTop + (L.cabin === 'fast' ? 0.34 : 0.38), 0, 0.25, 0.12);
     }
-    this.part(spoiler, -d.body.hx + 0.2, d.body.cy + d.body.hy + 0.38, 0, 0.25, 0.12);
+    if (L.scoop) this.part(this.mesh(block(0.7, 0.14, 0.5, 0.05, 0.9), MAT.dark), d.body.hx - 0.9, bodyTop + 0.2, 0, 0.35, 0.07);
+    if (L.rack) {
+      const rack = new THREE.Group();
+      for (const s of [-1, 1]) rack.add(this.tube(hx * 1.8, 0.07, 0.07, 0, 0.1, s * (hz - 0.2)));
+      for (let i = -1; i <= 1; i++) rack.add(this.tube(0.07, 0.07, (hz - 0.2) * 2, i * hx * 0.7, 0.1, 0));
+      const jerry = this.mesh(block(0.34, 0.4, 0.2, 0.05, 0.9), this.paint);
+      jerry.position.set(-hx * 0.4, 0.34, 0.2);
+      rack.add(jerry);
+      this.part(rack, cx, cyb + top + 0.04, 0, hx * 0.9, 0.2);
+    }
+    if (L.spare) {
+      const spare = new THREE.Group();
+      const t = this.mesh(tireGeometry(d.wheel.radius * 0.8, 0.28), MAT.rubber);
+      t.rotation.y = Math.PI / 2;
+      const r = this.mesh(new THREE.CylinderGeometry(d.wheel.radius * 0.5, d.wheel.radius * 0.5, 0.3, 14).rotateZ(Math.PI / 2), MAT.rim);
+      spare.add(t, r);
+      this.part(spare, -d.body.hx - 0.4, d.body.cy + 0.3, 0, d.wheel.radius * 0.4, d.wheel.radius * 0.8);
+    }
+    if (L.bullbar) {
+      const bar = new THREE.Group();
+      for (const s of [-1, 1]) bar.add(this.tube(0.1, 0.55, 0.1, 0, 0, s * (hz * 0.55)));
+      bar.add(this.tube(0.1, 0.1, hz * 1.5, 0, 0.2, 0), this.tube(0.1, 0.1, hz * 1.5, 0, -0.15, 0));
+      this.part(bar, d.body.hx + 0.3, d.body.cy - 0.02, 0, 0.1, 0.3);
+    }
 
-    // Wheel arch liners (dark discs behind the wheels) + suspension arms live on the body but
-    // are not separate debris.
+    // Wheel arch liners (dark discs behind the wheels) + suspension arms (not separate debris).
     for (const lx of [d.wheel.rearX, d.wheel.frontX]) {
       for (const s of [-1, 1]) {
         const arch = this.mesh(block(d.wheel.radius * 2.15, d.wheel.radius * 1.4, 0.05, 0.02, 1), MAT.dark);
@@ -200,15 +301,42 @@ export class CarModel {
     }
   }
 
+  /** Decal overlays, parented to the chassis slab so they break off with it. */
+  private addDecal(slab: THREE.Mesh, id: string): void {
+    if (id === 'none') return;
+    const d = this.def;
+    const w = d.body.hx * 2;
+    const h = d.body.hy * 2;
+    const hz = this.halfZ;
+    if (id === 'stripes') {
+      for (const z of [-0.2, 0.2]) {
+        const s = new THREE.Mesh(new THREE.BoxGeometry(w * 0.98, 0.02, 0.16), new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.5 }));
+        s.position.set(0, h / 2 + 0.005, z);
+        slab.add(s);
+      }
+      return;
+    }
+    const tex = decalTexture(id);
+    for (const side of [1, -1]) {
+      const mat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2 });
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.86, h * 0.92), mat);
+      p.position.set(0, 0, side * (hz + 0.006));
+      if (side < 0) p.rotation.y = Math.PI;
+      slab.add(p);
+    }
+  }
+
   private buildWheels(): void {
     const r = this.def.wheel.radius;
-    const tireW = 0.46;
+    const L = this.def.look;
+    const tireW = L.tireW;
     const tire = tireGeometry(r, tireW);
     const rimGeo = new THREE.CylinderGeometry(r * 0.62, r * 0.62, tireW + 0.02, 18).rotateX(Math.PI / 2);
     const hubGeo = new THREE.CylinderGeometry(r * 0.16, r * 0.16, tireW + 0.08, 10).rotateX(Math.PI / 2);
     const spokeGeo = block(r * 1.15, r * 0.14, tireW + 0.04, 0.02, 1);
-    const treadGeo = block(0.1, r * 0.12, tireW * 0.86, 0.02, 1);
-    const treads = 12;
+    const knobby = !!L.knobby;
+    const treads = knobby ? 16 : 12;
+    const treadGeo = knobby ? block(0.16 * Math.max(1, r * 1.3), r * 0.2, tireW * 0.9, 0.03, 1) : block(0.1, r * 0.12, tireW * 0.86, 0.02, 1);
 
     for (let i = 0; i < 4; i++) {
       const g = new THREE.Group();
@@ -223,7 +351,8 @@ export class CarModel {
       for (let k = 0; k < treads; k++) {
         const t = this.mesh(treadGeo, MAT.dark);
         const a = (k / treads) * Math.PI * 2;
-        t.position.set(Math.cos(a) * (r + 0.01), Math.sin(a) * (r + 0.01), 0);
+        const rr = r + (knobby ? 0.03 : 0.01);
+        t.position.set(Math.cos(a) * rr, Math.sin(a) * rr, 0);
         t.rotation.z = a;
         g.add(t);
       }

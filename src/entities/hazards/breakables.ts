@@ -363,8 +363,8 @@ export class Tnt extends Prop implements ContactOwner {
         const nx = (c.x - p.x) / Math.max(0.3, dist);
         const ny = (c.y - p.y) / Math.max(0.3, dist) + 0.5;
         for (const b of [car.chassis, car.wheels[0], car.wheels[1]]) b.applyLinearImpulse(new Vec2(nx * 14 * k * b.getMass(), ny * 14 * k * b.getMass()), b.getWorldCenter(), true);
-        // Too close to the blast = crash; at the edge you just get thrown (fair + readable).
-        if (dist < 2.3) car.crash('hazard');
+        // Only sitting right on top of it is fatal (a car shoving the crate stays ~2 m away); otherwise you just get thrown.
+        if (dist < 1.3) car.crash('hazard');
       }
     }
     this.ctx.emit('explosion', p.x, p.y, 1);

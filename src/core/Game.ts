@@ -1,4 +1,4 @@
-import { CONFIG, VEHICLES, scaleVehicle } from '../config';
+import { CONFIG, VEHICLES, VehicleId, scaleVehicle } from '../config';
 import { InputManager } from './Input';
 import { Loop } from './Loop';
 import { DebugOverlay } from './DebugOverlay';
@@ -74,6 +74,13 @@ export class Game {
   /** Vehicle size multiplier from transform pads (kept across checkpoints). */
   private carScale = 1;
   private cpScale = 1;
+  /** Player's garage pick (used unless the level forces a vehicle). */
+  garage: { vehicle: VehicleId; color: number; decal: string } = { vehicle: 'hatch', color: 0xe8553a, decal: 'none' };
+  /** Garage selection the current car was built with. */
+  private builtWith = '';
+  /** Vehicle currently driven (a level can force one; transform pads can swap it mid-level). */
+  private curVehicle: VehicleId = 'hatch';
+  private cpVehicle: VehicleId = 'hatch';
 
   phase: Phase = 'playing';
   deaths = 0;
@@ -104,6 +111,9 @@ export class Game {
   onComplete?: (r: CompleteResult) => void;
   /** Fired when the pause key is pressed during play. */
   onPauseRequest?: () => void;
+  /** Fired once per level after many deaths in a row (suggests trying another vehicle). */
+  onStuck?: () => void;
+  private stuckShown = false;
   /** Fired when auto-quality lowers the graphics setting. */
   onQualityDrop?: (q: string) => void;
   private shakeOn = true;
@@ -180,9 +190,12 @@ export class Game {
     this.finishTimer = 0;
     this.completeShown = false;
     this.respawnPoint = { x: data.spawn[0], y: data.spawn[1] };
+    this.stuckShown = false;
     this.carScale = 1;
     this.cpScale = 1;
-    this.hud.setLevel(data.id, data.name, data.checkpoints.length, th.accent, data.hint);
+    this.curVehicle = data.vehicle ?? this.garage.vehicle;
+    this.cpVehicle = this.curVehicle;
+    this.hud.setLevel(data.id, data.name, data.checkpoints.length, th.accent, data.vehicle ? `Vehicle: ${VEHICLES[data.vehicle].name}${data.hint ? ' · ' + data.hint : ''}` : data.hint);
     this.spawnCar();
   }
 
@@ -196,8 +209,10 @@ export class Game {
     this.debris.clear();
     this.model?.dispose();
     if (this.car && !this.car.crashed) this.car.destroy();
+    const d = this.data;
     const { x, y } = this.respawnPoint;
     this.carScale = this.cpIndex < 0 ? 1 : this.cpScale;
+    this.curVehicle = this.cpIndex < 0 ? (d.vehicle ?? this.garage.vehicle) : this.cpVehicle;
     this.buildCar(x, y);
     this.levelPhys.reset();
     this.levelPhys.setCar(this.car);
@@ -221,26 +236,30 @@ export class Game {
   /** Create the car + model at a pose, honouring the current transform-pad scale. */
   private buildCar(x: number, y: number, vel?: { x: number; y: number }): void {
     const d = this.data;
-    const base = VEHICLES[d.vehicle as 'hatch'] ?? VEHICLES.hatch;
+    const base = VEHICLES[this.curVehicle];
     this.car = new Car(this.pw, scaleVehicle(base, this.carScale), x, y, { antiFlip: d.antiFlip ?? 1, boostAllowed: !!d.boost });
     if (vel) for (const b of [this.car.chassis, this.car.wheels[0], this.car.wheels[1]]) b.setLinearVelocity(new Vec2(vel.x, vel.y));
-    this.model = new CarModel(base);
+    this.builtWith = `${this.garage.vehicle}|${this.garage.color}|${this.garage.decal}`;
+    this.model = new CarModel(base, this.garage.color, this.garage.decal);
     this.model.setScale(this.carScale);
     this.model.setHeadlights(!!d.dark);
     this.renderer.scene.add(this.model.root);
   }
 
   /** Transform pad: rebuild the car at its current spot with a new size, keeping momentum. */
-  private applyTransform(scale: number): void {
-    if (this.phase !== 'playing' || scale === this.carScale) return;
+  private applyTransform(scale: number, vehicleReq?: string): void {
+    const vehicle = vehicleReq === 'garage' ? (this.data.vehicle ?? this.garage.vehicle) : vehicleReq;
+    const swap = !!vehicle && vehicle !== this.curVehicle && vehicle in VEHICLES;
+    if (this.phase !== 'playing' || (scale === this.carScale && !swap)) return;
     const old = this.car;
     const p = old.chassis.getPosition();
     const v = old.chassis.getLinearVelocity();
-    const lift = (scale - this.carScale) * 0.6;
+    const lift = swap ? 0.8 : (scale - this.carScale) * 0.6;
     const pos = { x: p.x, y: p.y + Math.max(0, lift) + 0.1 };
     old.destroy();
     this.model.dispose();
     this.carScale = scale;
+    if (swap) this.curVehicle = vehicle as VehicleId;
     this.buildCar(pos.x, pos.y, { x: v.x, y: Math.max(0, v.y) });
     this.levelPhys.setCar(this.car);
     this.camRig.addShake(0.2);
@@ -253,7 +272,7 @@ export class Game {
     if (this.levelPhys.pendingTransform) {
       const t = this.levelPhys.pendingTransform;
       this.levelPhys.pendingTransform = null;
-      this.applyTransform(t.scale);
+      this.applyTransform(t.scale, t.vehicle);
     }
     if (!evs.length) return;
     const cx = this.lastPos.x;
@@ -325,6 +344,10 @@ export class Game {
     this.wipeStarted = false;
     this.deaths++;
     this.hud.setDeaths(this.deaths);
+    if (this.deaths >= 10 && !this.stuckShown && this.mode === 'play') {
+      this.stuckShown = true;
+      this.onStuck?.();
+    }
     this.lastPos = { x: cp.x, y: cp.y };
     this.camRig.addShake(0.85);
     if (this.mode === 'play') this.audio.crash();
@@ -333,6 +356,11 @@ export class Game {
     this.particles.burst(26, cp.x, cp.y, { speed: 9, up: 3, life: 0.7, size: 0.2, color: [0xffd34a, 0xff9a2e, 0xffffff], gravity: 1, drag: 0.4 });
     this.particles.burst(14, cp.x, cp.y, { speed: 4, up: 1, life: 0.9, size: 0.45, color: [0x555b63, 0x3a3f46], gravity: -0.3, drag: 1.6 });
     this.particles.burst(12, cp.x, cp.y, { speed: 7, up: 2, life: 0.8, size: 0.28, color: car.def.color, gravity: 1, drag: 0.5 });
+  }
+
+  /** True if the garage choice differs from the car on the track (and the level doesn't force one). */
+  garageChanged(): boolean {
+    return this.builtWith !== `${this.garage.vehicle}|${this.garage.color}|${this.garage.decal}`;
   }
 
   /** Instant retry from the last checkpoint (or the start, which also resets the clock). */
@@ -355,6 +383,7 @@ export class Game {
     this.cpIndex = -1;
     this.respawnPoint = { x: this.data.spawn[0], y: this.data.spawn[1] };
     this.cpScale = 1;
+    this.cpVehicle = this.data.vehicle ?? this.garage.vehicle;
     this.view?.flags.forEach((f) => f.reset(this.theme.accent));
     this.hud.setCheckpoints(0);
     this.deaths = 0;
@@ -367,6 +396,7 @@ export class Game {
     const c = this.data.checkpoints[i];
     this.respawnPoint = { x: c[0], y: c[1] + 1.3 };
     this.cpScale = this.carScale;
+    this.cpVehicle = this.curVehicle;
     this.pending.forEach((s) => this.banked.add(s));
     this.pending.clear();
     this.view!.flags[i].activate();

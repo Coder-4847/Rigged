@@ -267,7 +267,7 @@ export class LevelBuilder {
       id: m.id,
       name: m.name,
       world: m.world,
-      vehicle: m.vehicle ?? 'hatch',
+      ...(m.vehicle ? { vehicle: m.vehicle } : {}),
       ...(m.gravity !== undefined ? { gravity: m.gravity } : {}),
       ...(m.antiFlip !== undefined ? { antiFlip: m.antiFlip } : {}),
       ...(m.boost ? { boost: true } : {}),

@@ -121,6 +121,19 @@ Built phase by phase (see the master prompt).
   All 99 non-manual levels are cleared by the bot; level 87 (gravity flip) is flagged `manual` and only checked for
   physics blow-ups. `npm run levels` regenerates the JSON.
 
+- **Phase 8 — Vehicles & garage:** six vehicles with their own physics, drivetrain and model (`VEHICLES` in
+  `src/config.ts`): **Blockhead** hatchback (balanced), **Trailhound** 4x4 (grip, clearance, soft ride), **Dune Skipper**
+  buggy (light, bouncy, great air control), **Crushalot** monster truck (huge wheels and torque, slow to rotate),
+  **Redline** muscle car (fastest, rear-wheel-drive, stiff/twitchy), **Pocket Rocket** mini (tiny, agile).
+  Garage screen with a rotating 3D preview, stat bars, 12 paints and 6 decals (racing stripes, checker band, flames,
+  stars, camo). Unlocks: vehicles by total stars (10 / 30 / 60 / 100 / 150), paints by stars, decals by clearing 8
+  levels of worlds 2/4/6/8/10. Five levels force a vehicle that suits them (12 jeep, 33 monster, 45 mini, 47 muscle,
+  62 buggy), Chaos Circuit has vehicle-swap pads (`vehicle: 'garage'` hands back your own), the pause menu opens the
+  garage, and after 10 deaths in a level the game suggests trying another vehicle.
+  **Validation:** `npm run vehicles` runs the bot with every vehicle over every level. Hatch, jeep, muscle and mini clear
+  99/99, the buggy 98/99, the monster 94/99 (some tall-truck / swinging-ball combos are deliberately harder);
+  the script requires 100% for the hatch and ≥90% for the rest. `npm run test:full` includes it.
+
 Design decisions (ambiguities resolved for fun/readability): brake doubles as reverse once stopped; gas+brake together
 is a handbrake; air tilt is a dedicated axis (Up = nose up).
 
