@@ -82,7 +82,7 @@ export class Debris {
         part.obj,
         w,
         part.z,
-        new Box(Math.max(0.06, part.hx), Math.max(0.06, part.hy)),
+        new Box(Math.max(0.06, part.hx * model.k), Math.max(0.06, part.hy * model.k)),
         !!part.isHead,
       );
     }
@@ -90,7 +90,7 @@ export class Debris {
       const wp = wheels[i < 2 ? 0 : 1];
       const g = model.wheelGroups[i];
       const z = g.position.z;
-      spawn(g, { x: wp.x, y: wp.y, a: wp.a }, z, new Circle(model.def.wheel.radius));
+      spawn(g, { x: wp.x, y: wp.y, a: wp.a }, z, new Circle(model.def.wheel.radius * model.k));
     }
   }
 

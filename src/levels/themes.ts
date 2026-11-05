@@ -29,3 +29,13 @@ export const THEMES: Record<number, WorldTheme> = {
   9: { name: 'Zero-G Station', skyTop: 0x0b1020, skyHorizon: 0x2b3a66, dirt: 0x3a4468, top: 0x7e8cc0, bg: [0x1b2548, 0x141c38, 0x0e1428], bgShape: 'pipes', dust: [0xb0baf0, 0x8a96d0], hazard: 0xff5a36, accent: 0x7affc8, sun: 0xb8c8ff },
   10: { name: 'Chaos Circuit', skyTop: 0x2a1a4a, skyHorizon: 0xd96fa8, dirt: 0x3c2f5a, top: 0xa77bff, bg: [0x5a3f8f, 0x45306f, 0x33245a], bgShape: 'towers', dust: [0xffd2ff, 0xc9a2ff], hazard: 0xffe03a, accent: 0xff5ad1, sun: 0xffd9f0 },
 };
+
+/** Terrain colours for non-default surfaces (same shape cue everywhere: lighter/shinier = slippery, etc.). */
+export const SURFACE_STYLE: Record<string, { dirt: number; top: number }> = {
+  ice: { dirt: 0x7fb0d0, top: 0xcdefff },
+  snow: { dirt: 0x9db8c9, top: 0xf6fcff },
+  sand: { dirt: 0xb98f4a, top: 0xe6c97a },
+  metal: { dirt: 0x4b5560, top: 0x8f98a2 },
+  rock: { dirt: 0x55575e, top: 0x8d8f96 },
+  goo: { dirt: 0x4a2a7a, top: 0xa05ae0 },
+};

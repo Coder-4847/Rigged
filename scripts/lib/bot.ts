@@ -16,7 +16,7 @@ import type { InputState } from '../../src/core/Input';
 export function loadLevelsFromDisk(): LevelData[] {
   const root = join(import.meta.dirname, '..', '..', 'src', 'levels');
   const out: LevelData[] = [];
-  for (const d of readdirSync(root).filter((n) => /^world\d+$/.test(n)).sort()) {
+  for (const d of readdirSync(root).filter((n) => /^(world\d+|demo)$/.test(n)).sort()) {
     for (const f of readdirSync(join(root, d)).filter((n) => n.endsWith('.json')).sort()) {
       out.push(JSON.parse(readFileSync(join(root, d, f), 'utf8')) as LevelData);
     }
@@ -41,6 +41,8 @@ export interface BotOptions {
   /** Allow respawning at checkpoints (like a player would). */
   retries?: number;
   traceEvery?: number;
+  /** Debug hook called every step. */
+  onStep?: (car: Car, lp: LevelPhysics, t: number) => void;
 }
 
 export function runBot(level: LevelData, opts: BotOptions = {}): BotResult {
@@ -52,6 +54,7 @@ export function runBot(level: LevelData, opts: BotOptions = {}): BotResult {
   let respawn: [number, number] = level.spawn;
   let carCp = -1;
   let car = new Car(pw, def, respawn[0], respawn[1], { antiFlip: level.antiFlip ?? 1, boostAllowed: !!level.boost });
+  lp.setCar(car);
   const inp: InputState = { throttle: 0, brake: 0, tilt: 0, boost: false, restart: false, pause: false };
   let deaths = 0;
   let t = 0;
@@ -114,6 +117,7 @@ export function runBot(level: LevelData, opts: BotOptions = {}): BotResult {
     lp.update(dt);
     pw.step(dt);
 
+    opts.onStep?.(car, lp, t);
     const p = car.chassis.getPosition();
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > 5000 || Math.abs(p.y) > 5000) {
       exploded = true;
@@ -149,6 +153,7 @@ export function runBot(level: LevelData, opts: BotOptions = {}): BotResult {
       car.destroy();
       lp.reset();
       car = new Car(pw, def, respawn[0], respawn[1], { antiFlip: level.antiFlip ?? 1, boostAllowed: !!level.boost });
+      lp.setCar(car);
       stall = 0;
       backup = 0;
     }

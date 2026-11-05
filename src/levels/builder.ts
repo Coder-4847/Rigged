@@ -1,4 +1,4 @@
-import type { EntityData, LevelData, SurfaceType, DecoKind } from './types';
+import type { EntityData, LevelData, SurfaceType, DecoKind, ZoneKind } from './types';
 import type { VehicleId } from '../config';
 
 /**
@@ -237,6 +237,19 @@ export class LevelBuilder {
       const kind = kinds[Math.floor(rnd() * kinds.length)];
       this.deco(kind, x, -(5 + rnd() * 26), 0.8 + rnd() * 0.7);
     }
+    return this;
+  }
+
+  /** Zone resting on the ground between x0 and x1 (sand, goo, boost, wind, gravity...). */
+  zone(kind: ZoneKind, x0: number, x1: number, opts: { h?: number; strength?: number; angle?: number; y?: number } = {}): this {
+    const y = opts.y ?? this.y(x0) - 1;
+    this.ents.push({ type: 'zone', kind, x: x0, y, w: x1 - x0, h: opts.h ?? 8, ...(opts.strength !== undefined ? { strength: opts.strength } : {}), ...(opts.angle !== undefined ? { angle: opts.angle } : {}) });
+    return this;
+  }
+
+  /** Flat rock ceiling between x0 and x1 at height y (tunnels, cave roofs). */
+  ceiling(x0: number, x1: number, y: number, thickness = 8): this {
+    this.ents.push({ type: 'ceiling', points: [[x0, y], [x1, y]], thickness });
     return this;
   }
 

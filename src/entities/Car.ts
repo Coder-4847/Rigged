@@ -91,9 +91,19 @@ export class Car implements ContactOwner {
       userData: { kind: 'chassis', owner: this } satisfies FixtureTag,
     });
     const c = def.cabin;
+    // Cabin body: contacts here are just bumps (side hits against walls/props don't crash you).
     this.chassis.createFixture({
       shape: new Box(c.hx, c.hy, new Vec2(c.cx, c.cy), 0),
       density: c.density,
+      friction: 0.2,
+      restitution: 0.05,
+      ...filter,
+      userData: { kind: 'chassis', owner: this } satisfies FixtureTag,
+    });
+    // Thin roof slab on top: touching terrain with THIS is the head/roof crash from the design.
+    this.chassis.createFixture({
+      shape: new Box(c.hx * 0.88, 0.1, new Vec2(c.cx - 0.05, c.cy + c.hy - 0.06), 0),
+      density: 0.01,
       friction: 0.2,
       restitution: 0.05,
       ...filter,
@@ -155,7 +165,7 @@ export class Car implements ContactOwner {
     }
     if (!isSolid(other)) return;
     if (self.kind === 'roof') {
-      this.crash('roof');
+      if (other.surface !== 'oneway') this.crash('roof');
     } else if (self.kind === 'wheel') {
       this.wheelContacts[self.index ?? 0]++;
     } else if (self.kind === 'chassis') {
@@ -205,7 +215,11 @@ export class Car implements ContactOwner {
     const vel = ch.getLinearVelocity();
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
-    this.forwardSpeed = vel.x * cos + vel.y * sin;
+    // Flipped-gravity zones: the car rides upside-down, so "up" and "right" swap meaning.
+    const flipped = ch.getGravityScale() < 0;
+    const dirSign = flipped && cos < 0 ? -1 : 1; // player's "forward" in the car's own frame
+    const gSign = flipped ? -1 : 1;
+    this.forwardSpeed = (vel.x * cos + vel.y * sin) * dirSign;
 
     // Ground state
     const wasGrounded = this.grounded;
@@ -241,7 +255,7 @@ export class Car implements ContactOwner {
       braking = true;
     } else if (gas > 0.05) {
       // Wheel angular velocity is negative when rolling right (clockwise).
-      target = -gas * maxOmega;
+      target = -gas * maxOmega * dirSign;
       torque = m.torque;
       // Soft-limit: don't fight if already above top speed.
       if (this.forwardSpeed > m.maxSpeed) torque = m.idleTorque;
@@ -251,7 +265,7 @@ export class Car implements ContactOwner {
         torque = m.brakeTorque * brk;
         braking = true;
       } else {
-        target = brk * maxOmega * m.reverseFrac;
+        target = brk * maxOmega * m.reverseFrac * dirSign;
         torque = m.torque * 0.8;
       }
     }
@@ -268,7 +282,7 @@ export class Car implements ContactOwner {
     // ---- Downforce (keeps the car planted at speed) ----
     if (controlGrounded) {
       const f = def.downforce * Math.abs(this.forwardSpeed) * this.mass;
-      ch.applyForceToCenter(new Vec2(0, -f), true);
+      ch.applyForceToCenter(new Vec2(0, -f * gSign), true);
     }
 
     // ---- Air control ----
@@ -278,8 +292,8 @@ export class Car implements ContactOwner {
       const a = def.air;
       if (input.tilt !== 0) {
         // Torque tapers off as we approach the angular speed cap.
-        const room = Math.max(0, 1 - (input.tilt * w) / a.maxAngVel);
-        ch.applyTorque(input.tilt * a.tilt * this.mass * room * 2.2, true);
+        const room = Math.max(0, 1 - (input.tilt * gSign * w) / a.maxAngVel);
+        ch.applyTorque(input.tilt * gSign * a.tilt * this.mass * room * 2.2, true);
       } else {
         // No input: bleed spin so the car feels controllable.
         ch.applyTorque(-w * a.damping * this.mass * 0.6, true);
@@ -293,7 +307,7 @@ export class Car implements ContactOwner {
 
     // ---- Anti-flip assist ----
     if (this.grounded && this.options.antiFlip > 0) {
-      const wrapped = Math.atan2(sin, cos);
+      const wrapped = flipped ? Math.atan2(-sin, -cos) : Math.atan2(sin, cos);
       const start = 0.95; // ~54°: beyond what ordinary slopes produce
       const over = Math.abs(wrapped) - start;
       if (over > 0 && Math.abs(wrapped) < Math.PI * 0.62) {
@@ -308,7 +322,7 @@ export class Car implements ContactOwner {
     }
 
     // ---- Crash checks ----
-    const wrapped = Math.atan2(sin, cos);
+    const wrapped = flipped ? Math.atan2(-sin, -cos) : Math.atan2(sin, cos);
     const inverted = Math.abs(wrapped) > CONFIG.crash.invertedAngle;
     const touching = this.grounded || this.bodyContacts > 0;
     if (inverted && touching) {
@@ -317,11 +331,19 @@ export class Car implements ContactOwner {
     } else {
       this.invertedTime = Math.max(0, this.invertedTime - dt * 2);
     }
-    if (ch.getPosition().y < CONFIG.crash.killY) this.crash('fell');
+    const py = ch.getPosition().y;
+    if (py < CONFIG.crash.killY || py > this.pw.ceilingY) this.crash('fell');
 
     // Acceleration estimate for visual lean
     this.accel += ((vel.x - this.prevVx) / dt - this.accel) * Math.min(1, dt * 8);
     this.prevVx = vel.x;
+  }
+
+  /** Gravity multiplier for the whole car (low-gravity / flipped-gravity zones). */
+  setGravityScale(g: number): void {
+    this.chassis.setGravityScale(g);
+    this.wheels[0].setGravityScale(g);
+    this.wheels[1].setGravityScale(g);
   }
 
   /** True while the chassis body is touching solid ground (scraping). */

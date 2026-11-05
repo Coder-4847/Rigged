@@ -2,6 +2,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { world01 } from '../src/levels/author/world01';
+import { demos } from '../src/levels/author/demos';
 import type { LevelData } from '../src/levels/types';
 import { runBot } from './lib/bot';
 
@@ -35,5 +36,12 @@ for (const [w, levels] of Object.entries(worlds)) {
     writeFileSync(join(dir, `level${String(lv.id).padStart(2, '0')}.json`), JSON.stringify(lv));
     n++;
   }
+}
+// Hazard demo playgrounds (ids 901+): not part of the 100, but loadable with ?level=901.
+const demoDir = join(root, 'demo');
+mkdirSync(demoDir, { recursive: true });
+for (const lv of demos) {
+  writeFileSync(join(demoDir, `level${lv.id}.json`), JSON.stringify(lv));
+  n++;
 }
 console.log(`wrote ${n} levels`);

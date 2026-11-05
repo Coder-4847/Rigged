@@ -54,6 +54,8 @@ export class CarModel {
   private halfZ = 0.85;
   private wheelZ: number;
   private hubLocal = new THREE.Vector3();
+  /** Uniform size multiplier (transform pads). The model is built at base size and scaled. */
+  k = 1;
 
   constructor(readonly def: VehicleDef, color = def.color) {
     this.paint = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.08, vertexColors: true });
@@ -271,13 +273,13 @@ export class CarModel {
       const src = wheels[i < 2 ? 0 : 1];
       const side = i % 2 === 0 ? -1 : 1;
       const g = this.wheelGroups[i];
-      g.position.set(src.x, src.y, side * this.wheelZ);
+      g.position.set(src.x, src.y, side * this.wheelZ * this.k);
       g.rotation.z = src.a;
       // Suspension arm from the chassis mount to the wheel hub, in chassis space.
       const dx = src.x - chassis.x;
       const dy = src.y - chassis.y;
-      const lx = dx * ca - dy * sa;
-      const ly = dx * sa + dy * ca;
+      const lx = (dx * ca - dy * sa) / this.k;
+      const ly = (dx * sa + dy * ca) / this.k;
       this.hubLocal.set(lx, ly, side * (this.halfZ - 0.1));
       const ax = lx;
       const ay = d.wheel.anchorY + 0.12;
@@ -286,6 +288,13 @@ export class CarModel {
       arm.position.set(ax, (ay + ly) / 2, this.hubLocal.z);
       arm.scale.set(1, len, 1);
     }
+  }
+
+  /** Resize the whole vehicle (physics is rebuilt separately with scaleVehicle). */
+  setScale(k: number): void {
+    this.k = k;
+    this.body.scale.setScalar(k);
+    for (const g of this.wheelGroups) g.scale.setScalar(k);
   }
 
   /** Kick the visual squash spring (landing impact in m/s). */
@@ -335,6 +344,7 @@ export class CarModel {
   partWorld(part: CarPart, chassis: { x: number; y: number; a: number }): { x: number; y: number; a: number } {
     const c = Math.cos(chassis.a);
     const s = Math.sin(chassis.a);
-    return { x: chassis.x + part.x * c - part.y * s, y: chassis.y + part.x * s + part.y * c, a: chassis.a };
+    const k = this.k;
+    return { x: chassis.x + (part.x * c - part.y * s) * k, y: chassis.y + (part.x * s + part.y * c) * k, a: chassis.a };
   }
 }

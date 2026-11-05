@@ -55,5 +55,26 @@ Built phase by phase (see the master prompt).
   flags, finish gate with confetti, per-world themes + parallax silhouettes, HUD and level-complete card.
   **World 1 (levels 1–10) is playable end to end** and a bot completes all 10 in the headless smoke test.
 
+- **Phase 4 — Obstacle catalog:** every entity type from the design is data-driven (`EntityData` in
+  `src/levels/types.ts`), has a headless physics behavior (`src/entities/hazards/`), a view
+  (`src/render/hazards/`), telegraphing and sound. Six demo playgrounds: `?level=901` … `?level=906`.
+
+  | Family | Types |
+  | --- | --- |
+  | Surfaces | ice / snow / sand / metal / rock / goo terrain friction, sand + goo drag zones, conveyors, boost strips, bounce pads, one-way platforms |
+  | Forces | wind fans, low-gravity and flipped-gravity zones, magnets (attract/repel), vacuum tubes, cannons |
+  | Movers | moving platforms, rotating gears, swinging wrecking balls / pendulum platforms, tilting plates, sliding doors (rhythm or switch), spinning saws on rails |
+  | Crushers | pistons (any direction) with idle → warn (shake + lamp + beeps) → slam → hold → retract; period/phase configurable for rhythm sequences |
+  | Lasers | static, sweeping, pulsing (charge-up preview line), slow tracking turret, switch-controlled, mirrors (up to 4 bounces), kill on contact |
+  | Hazards | floor/wall spikes, saws, wrecking balls — all use the hazard accent + stripes/spikes/triangle signs so they aren't colour-only |
+  | Breakables | crumbling blocks, collapsing bridges, falling icicles/rocks/signs (ground ring warns ~1 s ahead), TNT (hit → flashing fuse → blast), pushable crates, dominoes, rolling boulders |
+  | Misc | switches, transform pads (resize the car; vehicle swap hooks in once more vehicles exist), ceilings/tunnels |
+
 Design decisions (ambiguities resolved for fun/readability): brake doubles as reverse once stopped; gas+brake together
 is a handbrake; air tilt is a dedicated axis (Up = nose up).
+
+- Only a thin roof slab counts as "roof" for the crash rule (the cabin body is a normal bump), so clipping a crate or
+  domino with the hood doesn't kill you but touching terrain with the roof does.
+- Hazard `ctrl` ids: lasers are OFF while their switch is on, doors are OPEN, crushers are paused.
+- Not yet done from the catalog: shielded checkpoints, curved loop/half-pipe helpers and "ramps that appear after a
+  trigger" (needs a level that uses them), vehicle-swap transform pads (waiting on the garage phase).

@@ -173,3 +173,25 @@ export const VEHICLES: Record<'hatch', VehicleDef> = {
     color: 0xe8553a,
   },
 };
+
+/**
+ * Uniformly scale a vehicle (transform pads). Torques scale with k³ (traction ∝ mass·r) and air
+ * tilt with k² so the car keeps the same acceleration and rotational feel at any size.
+ */
+export function scaleVehicle(d: VehicleDef, k: number): VehicleDef {
+  if (k === 1) return d;
+  return {
+    ...d,
+    body: { ...d.body, hx: d.body.hx * k, hy: d.body.hy * k, cy: d.body.cy * k },
+    cabin: { ...d.cabin, hx: d.cabin.hx * k, hy: d.cabin.hy * k, cx: d.cabin.cx * k, cy: d.cabin.cy * k },
+    wheel: { ...d.wheel, radius: d.wheel.radius * k, rearX: d.wheel.rearX * k, frontX: d.wheel.frontX * k, anchorY: d.wheel.anchorY * k },
+    suspension: { ...d.suspension, travel: d.suspension.travel * k },
+    motor: {
+      ...d.motor,
+      torque: d.motor.torque * k ** 3,
+      brakeTorque: d.motor.brakeTorque * k ** 3,
+      idleTorque: d.motor.idleTorque * k ** 3,
+    },
+    air: { ...d.air, tilt: d.air.tilt * k * k },
+  };
+}

@@ -5,7 +5,9 @@ import { Background } from './Background';
 import { buildDeco } from './Scenery';
 import { FinishView, FlagView, StarView } from './Pickups';
 import type { LevelData } from '../levels/types';
-import type { WorldTheme } from '../levels/themes';
+import { SURFACE_STYLE, type WorldTheme } from '../levels/themes';
+import { HazardView } from './hazards/hz';
+import { makeHazardView } from './hazards/HazardViews';
 import type { LevelPhysics, SeesawBody } from '../entities/LevelPhysics';
 
 const plankMat = new THREE.MeshStandardMaterial({ color: 0xc8924f, roughness: 0.8, vertexColors: true });
@@ -59,6 +61,7 @@ export class LevelView {
   readonly finish: FinishView;
   readonly background: Background;
   private seesaws: SeesawView[] = [];
+  private hazards: HazardView[] = [];
   private time = 0;
 
   constructor(
@@ -69,7 +72,10 @@ export class LevelView {
   ) {
     for (const e of data.entities) {
       if (e.type === 'terrain') {
-        this.root.add(buildTerrainMesh(e.points, e.depth ?? 14, { dirt: theme.dirt, top: theme.top, turf: 0.7 }));
+        const st = e.surface && e.surface !== 'grass' ? SURFACE_STYLE[e.surface] : undefined;
+        this.root.add(buildTerrainMesh(e.points, e.depth ?? 14, { dirt: st?.dirt ?? theme.dirt, top: st?.top ?? theme.top, turf: 0.7 }));
+      } else if (e.type === 'ceiling') {
+        this.root.add(buildCeilingMesh(e.points, e.thickness ?? 8, theme));
       } else if (e.type === 'deco') {
         const d = buildDeco(e.kind, theme, e.scale ?? 1, e.text);
         d.position.set(e.x, e.y, e.z ?? -6);
@@ -81,6 +87,14 @@ export class LevelView {
       const v = new SeesawView(s);
       this.seesaws.push(v);
       this.root.add(v.group, v.fulcrum);
+    }
+    const vctx = { pal: { hazard: theme.hazard, accent: theme.accent, metal: 0x6c7580 }, ground: physics.groundAt };
+    for (const b of physics.behaviors) {
+      const hv = makeHazardView(b, vctx);
+      if (hv) {
+        this.hazards.push(hv);
+        this.root.add(hv.object);
+      }
     }
     data.stars.forEach((s, i) => {
       const v = new StarView(s[0], s[1], i * 1.7);
@@ -104,6 +118,7 @@ export class LevelView {
   update(alpha: number, dt: number, camX: number, camY: number): void {
     this.time += dt;
     for (const s of this.seesaws) s.update(alpha);
+    for (const h of this.hazards) h.update(alpha, this.time, dt);
     for (const s of this.stars) s.update(dt, this.time);
     for (const f of this.flags) f.update(dt, this.time);
     this.finish.update(this.time);
@@ -117,4 +132,25 @@ export class LevelView {
     });
     this.root.removeFromParent();
   }
+}
+
+/** Hanging rock ceiling: extruded slab above the polyline, with a lighter lip along the lower edge. */
+function buildCeilingMesh(points: ReadonlyArray<readonly [number, number]>, thickness: number, theme: WorldTheme): THREE.Group {
+  const g = new THREE.Group();
+  const first = points[0];
+  const last = points[points.length - 1];
+  const topY = Math.max(...points.map((p) => p[1])) + thickness;
+  const shape = new THREE.Shape();
+  shape.moveTo(first[0], topY);
+  shape.lineTo(first[0], first[1]);
+  for (let i = 1; i < points.length; i++) shape.lineTo(points[i][0], points[i][1]);
+  shape.lineTo(last[0], topY);
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 40, bevelEnabled: true, bevelThickness: 0.15, bevelSize: 0.15, bevelOffset: -0.15, bevelSegments: 2 });
+  geo.translate(0, 0, -34);
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: SURFACE_STYLE.rock.dirt, roughness: 1 }));
+  m.receiveShadow = true;
+  g.add(m);
+  void theme;
+  return g;
 }

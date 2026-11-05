@@ -1,4 +1,4 @@
-import { CONFIG, VEHICLES } from '../config';
+import { CONFIG, VEHICLES, scaleVehicle } from '../config';
 import { InputManager } from './Input';
 import { Loop } from './Loop';
 import { DebugOverlay } from './DebugOverlay';
@@ -13,9 +13,13 @@ import { DebugDraw } from '../render/DebugDraw';
 import { Particles } from '../render/Particles';
 import { LevelView } from '../render/LevelView';
 import { LevelPhysics } from '../entities/LevelPhysics';
+import type { HazardEvent } from '../entities/hazards/core';
+import { Laser } from '../entities/hazards/beams';
+import { Saw } from '../entities/hazards/movers';
 import { THEMES, WorldTheme } from '../levels/themes';
 import { LEVEL_COUNT, getLevel, hasLevel } from '../levels/registry';
 import type { LevelData } from '../levels/types';
+import { Vec2 } from 'planck';
 import { Hud } from '../ui/Hud';
 import { Wipe } from '../ui/Wipe';
 
@@ -55,6 +59,9 @@ export class Game {
   private finishFx = 0;
   private completeShown = false;
   private loading = false;
+  /** Vehicle size multiplier from transform pads (kept across checkpoints). */
+  private carScale = 1;
+  private cpScale = 1;
 
   phase: Phase = 'playing';
   deaths = 0;
@@ -142,6 +149,8 @@ export class Game {
     this.finishTimer = 0;
     this.completeShown = false;
     this.respawnPoint = { x: data.spawn[0], y: data.spawn[1] };
+    this.carScale = 1;
+    this.cpScale = 1;
     this.hud.setLevel(data.id, data.name, data.checkpoints.length, th.accent, data.hint);
     this.spawnCar();
   }
@@ -167,16 +176,11 @@ export class Game {
     this.debris.clear();
     this.model?.dispose();
     if (this.car && !this.car.crashed) this.car.destroy();
-    const d = this.data;
     const { x, y } = this.respawnPoint;
-    this.car = new Car(this.pw, VEHICLES[d.vehicle as 'hatch'] ?? VEHICLES.hatch, x, y, {
-      antiFlip: d.antiFlip ?? 1,
-      boostAllowed: !!d.boost,
-    });
-    this.model = new CarModel(this.car.def);
-    this.model.setHeadlights(!!d.dark);
-    this.renderer.scene.add(this.model.root);
+    this.carScale = this.cpIndex < 0 ? 1 : this.cpScale;
+    this.buildCar(x, y);
     this.levelPhys.reset();
+    this.levelPhys.setCar(this.car);
     this.phase = 'playing';
     this.crashTimer = 0;
     this.wipeStarted = false;
@@ -192,6 +196,94 @@ export class Game {
     });
     this.hud.setStars(this.view!.stars.map((_, i) => this.banked.has(i)));
     this.camRig.snapTo({ x, y, vx: 0, vy: 0, speedFrac: 0 });
+  }
+
+  /** Create the car + model at a pose, honouring the current transform-pad scale. */
+  private buildCar(x: number, y: number, vel?: { x: number; y: number }): void {
+    const d = this.data;
+    const base = VEHICLES[d.vehicle as 'hatch'] ?? VEHICLES.hatch;
+    this.car = new Car(this.pw, scaleVehicle(base, this.carScale), x, y, { antiFlip: d.antiFlip ?? 1, boostAllowed: !!d.boost });
+    if (vel) for (const b of [this.car.chassis, this.car.wheels[0], this.car.wheels[1]]) b.setLinearVelocity(new Vec2(vel.x, vel.y));
+    this.model = new CarModel(base);
+    this.model.setScale(this.carScale);
+    this.model.setHeadlights(!!d.dark);
+    this.renderer.scene.add(this.model.root);
+  }
+
+  /** Transform pad: rebuild the car at its current spot with a new size, keeping momentum. */
+  private applyTransform(scale: number): void {
+    if (this.phase !== 'playing' || scale === this.carScale) return;
+    const old = this.car;
+    const p = old.chassis.getPosition();
+    const v = old.chassis.getLinearVelocity();
+    const lift = (scale - this.carScale) * 0.6;
+    const pos = { x: p.x, y: p.y + Math.max(0, lift) + 0.1 };
+    old.destroy();
+    this.model.dispose();
+    this.carScale = scale;
+    this.buildCar(pos.x, pos.y, { x: v.x, y: Math.max(0, v.y) });
+    this.levelPhys.setCar(this.car);
+    this.camRig.addShake(0.2);
+    this.particles.burst(24, p.x, p.y, { speed: 7, up: 2, life: 0.8, size: 0.25, color: scale > 1 ? [0xffa23a, 0xffe066, 0xffffff] : [0x4ad8ff, 0xaaf0ff, 0xffffff], gravity: 0.2, drag: 1 });
+  }
+
+  /** Turn level events into sound, particles and shake (volume falls off with distance to the car). */
+  private handleEvents(): void {
+    const evs = this.levelPhys.drain();
+    if (this.levelPhys.pendingTransform) {
+      const t = this.levelPhys.pendingTransform;
+      this.levelPhys.pendingTransform = null;
+      this.applyTransform(t.scale);
+    }
+    if (!evs.length) return;
+    const cx = this.lastPos.x;
+    const cy = this.lastPos.y;
+    for (const e of evs) this.reactTo(e, cx, cy);
+  }
+
+  private reactTo(e: HazardEvent, cx: number, cy: number): void {
+    const dist = Math.hypot(e.x - cx, e.y - cy);
+    const vol = Math.pow(Math.max(0, 1 - dist / 48), 1.6);
+    this.audio.hazard(e.kind, vol);
+    const P = this.particles;
+    const dust = this.theme.dust;
+    switch (e.kind) {
+      case 'crusher-slam':
+        this.camRig.addShake(0.5 * vol);
+        P.burst(14, e.x, e.y, { speed: 6, up: 1.5, life: 0.6, size: 0.35, color: dust, gravity: 0.2, drag: 1.2 });
+        break;
+      case 'explosion':
+        this.camRig.addShake(0.9 * vol);
+        P.burst(40, e.x, e.y, { speed: 14, up: 4, life: 0.8, size: 0.4, color: [0xffd34a, 0xff7a2e, 0xff4a1e, 0x333333], gravity: 0.5, drag: 0.8 });
+        navigator.vibrate?.(vol > 0.3 ? 60 : 0);
+        break;
+      case 'fall-hit':
+        this.camRig.addShake(0.3 * vol);
+        P.burst(12, e.x, e.y + 0.3, { speed: 5, up: 2, life: 0.6, size: 0.3, color: dust, gravity: 0.4, drag: 1 });
+        break;
+      case 'crumble':
+        P.burst(8, e.x, e.y, { speed: 3, up: 0.5, life: 0.7, size: 0.28, color: dust, gravity: 0.6, drag: 1 });
+        break;
+      case 'bounce':
+        P.burst(12, e.x, e.y + 0.4, { speed: 5, up: 1, life: 0.5, size: 0.22, color: [0xff4fa3, 0xffffff], gravity: 0.2, drag: 1.2 });
+        break;
+      case 'cannon':
+        this.camRig.addShake(0.45 * vol);
+        P.burst(22, e.x, e.y, { speed: 9, up: 2, life: 0.7, size: 0.4, color: [0x555b63, 0xffb52e, 0xffffff], gravity: -0.1, drag: 1.4 });
+        break;
+      case 'boost':
+        P.burst(10, e.x, e.y - 0.5, { speed: 6, up: 0, life: 0.4, size: 0.16, color: [0xffe066, 0xffffff], gravity: 0, drag: 0.6 });
+        break;
+      case 'laser-zap':
+        P.burst(18, e.x, e.y, { speed: 9, up: 1, life: 0.4, size: 0.14, color: [this.theme.hazard, 0xffffff], gravity: 0.2, drag: 1 });
+        break;
+      case 'switch':
+        P.burst(10, e.x, e.y + 0.4, { speed: 4, up: 1, life: 0.5, size: 0.18, color: [0x4cd964, 0xffffff], gravity: 0.2, drag: 1.2 });
+        break;
+      case 'boulder':
+        P.burst(10, e.x, e.y, { speed: 4, up: 1, life: 0.8, size: 0.4, color: dust, gravity: 0.2, drag: 1 });
+        break;
+    }
   }
 
   /** Called after a physics step in which the car crashed (never inside a contact callback). */
@@ -242,6 +334,7 @@ export class Game {
   restartLevel(): void {
     this.cpIndex = -1;
     this.respawnPoint = { x: this.data.spawn[0], y: this.data.spawn[1] };
+    this.cpScale = 1;
     this.view?.flags.forEach((f) => f.reset(this.theme.accent));
     this.hud.setCheckpoints(0);
     this.deaths = 0;
@@ -253,6 +346,7 @@ export class Game {
     this.cpIndex = i;
     const c = this.data.checkpoints[i];
     this.respawnPoint = { x: c[0], y: c[1] + 1.3 };
+    this.cpScale = this.carScale;
     this.pending.forEach((s) => this.banked.add(s));
     this.pending.clear();
     this.view!.flags[i].activate();
@@ -328,6 +422,7 @@ export class Game {
     }
     this.levelPhys.update(dt);
     this.pw.step(dt);
+    this.handleEvents();
 
     if (this.phase === 'playing') {
       if (this.car.crashed) this.onCrash();
@@ -446,6 +541,7 @@ export class Game {
       }
     }
 
+    if (this.phase === 'playing') this.updateAmbient();
     this.debris.update(alpha, frameDt);
     this.particles.update(frameDt);
 
@@ -478,6 +574,30 @@ export class Game {
       '[F1] physics  [F2] slow-mo  [F3] stats  [R] restart  [ ] ] level',
     ]);
     this.renderer.render();
+  }
+
+  /** Laser hum / saw whir get louder as you approach the nearest active one. */
+  private updateAmbient(): void {
+    const px = this.lastPos.x;
+    const py = this.lastPos.y;
+    let laser = 0;
+    let saw = 0;
+    for (const b of this.levelPhys.behaviors) {
+      if (b instanceof Laser && b.isOn) {
+        for (const s of b.segs) {
+          // distance from the car to the beam segment
+          const dx = s.x1 - s.x0;
+          const dy = s.y1 - s.y0;
+          const t = Math.max(0, Math.min(1, ((px - s.x0) * dx + (py - s.y0) * dy) / Math.max(1e-6, dx * dx + dy * dy)));
+          const d = Math.hypot(px - (s.x0 + dx * t), py - (s.y0 + dy * t));
+          laser = Math.max(laser, Math.pow(Math.max(0, 1 - d / 22), 1.5));
+        }
+      } else if (b instanceof Saw) {
+        const p = b.body.getPosition();
+        saw = Math.max(saw, Math.pow(Math.max(0, 1 - Math.hypot(px - p.x, py - p.y) / 24), 1.5));
+      }
+    }
+    this.audio.ambient(laser, saw, this.time);
   }
 
   private emitDriveFx(dt: number, c: { x: number; y: number; a: number }, w0: { x: number; y: number }, w1: { x: number; y: number }): void {

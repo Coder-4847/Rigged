@@ -34,7 +34,20 @@ export interface ContactOwner {
   onBegin?(self: FixtureTag, other: FixtureTag, contact: Contact): void;
   onEnd?(self: FixtureTag, other: FixtureTag, contact: Contact): void;
   onImpact?(self: FixtureTag, other: FixtureTag, normalImpulse: number, contact: Contact): void;
+  /** May disable the contact or set a tangent speed (one-way platforms, conveyors). */
+  onPreSolve?(self: FixtureTag, other: FixtureTag, contact: Contact): void;
 }
+
+/** Terrain friction by surface type (mixed with the wheel's own grip by Box2D). */
+export const SURFACE_FRICTION: Record<string, number> = {
+  grass: 1,
+  sand: 0.9,
+  snow: 0.7,
+  ice: 0.035,
+  metal: 0.9,
+  rock: 1,
+  goo: 1.4,
+};
 
 /** True for fixtures that physically support/obstruct the car. */
 export function isSolid(tag: FixtureTag | undefined): boolean {
@@ -76,12 +89,15 @@ export class PhysicsWorld {
   private tracked = new Set<Tracked>();
   /** Total simulated time. */
   time = 0;
+  /** Y above which a car is considered lost (matters for flipped-gravity zones). */
+  ceilingY = 400;
 
   constructor(gravity = CONFIG.physics.gravity) {
     this.world = new World({ gravity: new Vec2(0, gravity) });
     this.world.on('begin-contact', (c) => this.route(c, 'onBegin'));
     this.world.on('end-contact', (c) => this.route(c, 'onEnd'));
     this.world.on('post-solve', (c, imp) => this.routeImpact(c, imp));
+    this.world.on('pre-solve', (c) => this.routePre(c));
   }
 
   setGravity(g: number): void {
@@ -117,13 +133,39 @@ export class PhysicsWorld {
     verts.push(new Vec2(last[0], floorY), new Vec2(first[0], floorY));
     body.createFixture({
       shape: new Chain(verts, true),
-      friction: 1,
+      friction: SURFACE_FRICTION[surface] ?? 1,
       restitution: 0,
       filterCategoryBits: Cat.TERRAIN,
       filterMaskBits: Cat.CAR | Cat.DEBRIS | Cat.PROP,
       userData: { kind: 'terrain', surface } satisfies FixtureTag,
     });
     return body;
+  }
+
+  /** Hanging ceiling slab: `points` is the lower (visible) edge, extruded upward by `thickness`. */
+  addCeiling(points: ReadonlyArray<readonly [number, number]>, thickness: number): Body {
+    const body = this.world.createBody({ type: 'static' });
+    const verts = points.map(([x, y]) => new Vec2(x, y));
+    const first = points[0];
+    const last = points[points.length - 1];
+    const topY = Math.max(...points.map((p) => p[1])) + thickness;
+    verts.push(new Vec2(last[0], topY), new Vec2(first[0], topY));
+    body.createFixture({
+      shape: new Chain(verts, true),
+      friction: 0.6,
+      filterCategoryBits: Cat.TERRAIN,
+      filterMaskBits: Cat.CAR | Cat.DEBRIS | Cat.PROP,
+      userData: { kind: 'terrain', surface: 'rock' } satisfies FixtureTag,
+    });
+    return body;
+  }
+
+  private routePre(c: Contact): void {
+    const a = c.getFixtureA().getUserData() as FixtureTag | undefined;
+    const b = c.getFixtureB().getUserData() as FixtureTag | undefined;
+    if (!a || !b) return;
+    a.owner?.onPreSolve?.(a, b, c);
+    b.owner?.onPreSolve?.(b, a, c);
   }
 
   private route(c: Contact, fn: 'onBegin' | 'onEnd'): void {
