@@ -25,6 +25,7 @@ import { Autopilot } from './Autopilot';
 import type { TrackId } from './music/tracks';
 import { popcount, Settings } from './Save';
 import { Wipe } from '../ui/Wipe';
+import { Tricks, type TrickEvent } from './Tricks';
 
 type Phase = 'playing' | 'crashed' | 'finished';
 
@@ -55,6 +56,7 @@ export class Game {
   readonly wipe: Wipe;
   readonly hud: Hud;
   car!: Car;
+  readonly tricks = new Tricks();
   model!: CarModel;
 
   // --- level state ---
@@ -76,7 +78,7 @@ export class Game {
   private carScale = 1;
   private cpScale = 1;
   /** Player's garage pick (used unless the level forces a vehicle). */
-  garage: { vehicle: VehicleId; color: number; decal: string } = { vehicle: 'hatch', color: 0xe8553a, decal: 'none' };
+  garage: { vehicle: VehicleId; color: number; decal: string } = { vehicle: 'hatch', color: 0xffc21a, decal: 'none' };
   /** Garage selection the current car was built with. */
   private builtWith = '';
   /** Vehicle currently driven (a level can force one; transform pads can swap it mid-level). */
@@ -179,8 +181,8 @@ export class Game {
     this.renderer.setSky(th.skyTop, th.skyHorizon);
     this.renderer.sun.color.set(th.sun);
     const dark = !!data.dark;
-    this.renderer.hemi.intensity = dark ? 0.35 : 1.15;
-    this.renderer.sun.intensity = dark ? 0.7 : 2.3;
+    this.renderer.hemi.intensity = dark ? 0.35 : 1.35;
+    this.renderer.sun.intensity = dark ? 0.7 : 2.5;
 
     this.levelTime = 0;
     this.started = false;
@@ -218,6 +220,7 @@ export class Game {
     this.buildCar(x, y);
     this.levelPhys.reset();
     this.levelPhys.setCar(this.car);
+    this.tricks.reset();
     this.phase = 'playing';
     this.crashTimer = 0;
     this.wipeStarted = false;
@@ -424,6 +427,7 @@ export class Game {
 
   private onFinish(): void {
     this.phase = 'finished';
+    this.tricks.reset();
     this.finishTimer = 0;
     this.finishFx = 1.1;
     this.pending.forEach((s) => this.banked.add(s));
@@ -613,9 +617,24 @@ export class Game {
 
     if (this.phase === 'playing') {
       if (this.car.crashed) this.onCrash();
-      else this.checkTriggers();
+      else {
+        const tr = this.tricks.step(this.car, dt);
+        if (tr) this.onTrick(tr);
+        this.checkTriggers();
+      }
     }
     this.input.endFrame();
+  }
+
+  /** A trick landed: popup, sound, shake, a burst of sparkles (the nitro itself is applied by Tricks). */
+  private onTrick(t: TrickEvent): void {
+    if (this.mode !== 'play') return;
+    this.hud.showTrick(t.title, t.sub, t.power);
+    this.audio.trick(t.power);
+    this.camRig.addShake(0.15 + t.power * 0.2);
+    this.buzz(20 + Math.round(t.power * 40));
+    const p = this.car.chassis.getPosition();
+    this.particles.burst(18 + Math.round(t.power * 16), p.x, p.y + 0.8, { speed: 7, up: 3, life: 0.7, size: 0.22, color: [0xffd23a, 0xffffff, 0xff8a3d, 0x6ee7ff], gravity: 0.5, drag: 0.8 });
   }
 
   /** Stars, checkpoints and the finish line (cheap proximity tests at the physics rate). */
@@ -851,6 +870,23 @@ export class Game {
     const sin = Math.sin(c.a);
     const ex = -def.body.hx - 0.15;
     const ey = def.body.cy - 0.2;
+    if (this.tricks.nitro > 0) {
+      // nitro: a stream of flame out of the back
+      for (let k = 0; k < 3; k++)
+        P.emit({
+          x: c.x + ex * cos - ey * sin,
+          y: c.y + ex * sin + ey * cos,
+          z: (Math.random() - 0.5) * 0.8,
+          vx: -cos * (7 + Math.random() * 4),
+          vy: -sin * 6 + (Math.random() - 0.5) * 1.5,
+          life: 0.22 + Math.random() * 0.12,
+          size: 0.32 + Math.random() * 0.18,
+          color: [0xffe066, 0xff9a2e, 0xff5a1e, 0x6ee7ff][Math.floor(Math.random() * 4)],
+          gravity: -0.4,
+          drag: 2,
+          spin: (Math.random() - 0.5) * 10,
+        });
+    }
     this.exhaustAcc += dt * (this.lastInput.throttle > 0.1 ? 18 : 5);
     while (this.exhaustAcc > 1) {
       this.exhaustAcc -= 1;

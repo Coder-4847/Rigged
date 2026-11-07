@@ -327,11 +327,21 @@ function crumbleView(c: CrumbleBlock, v: ViewCtx, plank = false): HazardView {
   const h = c.d.h;
   const root = new THREE.Group();
   const n = plank ? 1 : Math.max(1, Math.round(w / 1.6));
-  const color = v.world === 3 ? 0xbfe6ff : plank ? 0xb88445 : 0xa68b6b;
+  const color = v.world === 3 ? 0xbfe6ff : plank ? 0xd39250 : 0xb89470;
   for (let i = 0; i < n; i++) {
-    const b = box(w / n - 0.04, h, 3.2, std(color, { rough: 0.95 }), 0.1);
+    const b = box(w / n - (plank ? 0.16 : 0.04), h, plank ? 3.4 : 3.2, std(color, { rough: 0.95 }), plank ? 0.08 : 0.1);
     b.position.x = -w / 2 + (w / n) * (i + 0.5);
     root.add(b);
+    if (plank) {
+      // little rail posts + rope on both sides, like a toy rope bridge
+      for (const z of [-1.6, 1.6]) {
+        const post = box(0.16, 0.9, 0.16, std(0x8a5a2e, { rough: 0.9 }), 0.04);
+        post.position.set(b.position.x, h / 2 + 0.45, z);
+        const rope = box(w / n + 0.02, 0.08, 0.08, std(0xf0deb4, { rough: 0.9 }), 0.02);
+        rope.position.set(b.position.x, h / 2 + 0.8, z);
+        root.add(post, rope);
+      }
+    }
     if (!plank) {
       const crack = box(0.08, h * 0.7, 3.25, std(0x4a3a28, { vc: false }), 0.01);
       crack.position.set(b.position.x + 0.2, 0, 0);
@@ -578,6 +588,16 @@ function makeView(b: Behavior, v: ViewCtx): HazardView | null {
     const views = b.planks.map((p) => crumbleView(p, v, true));
     const g = new THREE.Group();
     views.forEach((x) => g.add(x.object));
+    // chunky brick pillars at both ends (they stay when the planks fall)
+    for (const px of [b.d.x, b.d.x + b.d.w]) {
+      for (const z of [-1.9, 1.9]) {
+        const pil = box(1.1, 3.2, 1.1, std(0xd98b6a, { rough: 0.9 }), 0.12);
+        pil.position.set(px, b.d.y - 0.6, z);
+        const cap = box(1.35, 0.35, 1.35, std(0xf2c7a8, { rough: 0.9 }), 0.08);
+        cap.position.set(px, b.d.y + 1.1, z);
+        g.add(pil, cap);
+      }
+    }
     return { object: g, update: (a, t, dt) => views.forEach((x) => x.update(a, t, dt)) };
   }
   if (b instanceof CrumbleBlock) return crumbleView(b, v);

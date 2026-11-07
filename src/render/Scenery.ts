@@ -14,6 +14,7 @@ function mat(color: number, rough = 0.85): THREE.MeshStandardMaterial {
   }
   return m;
 }
+const arrowMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.25, roughness: 0.5 });
 const shade = (c: number, k: number) => new THREE.Color(c).multiplyScalar(k).getHex();
 
 /** Block geometries are shared between every deco of the same shape (never disposed per level). */
@@ -63,7 +64,7 @@ function signTexture(text: string): THREE.CanvasTexture {
 }
 
 /** Build one piece of scenery standing with its base at the local origin. */
-export function buildDeco(kind: DecoKind, theme: WorldTheme, scale: number, text?: string): THREE.Object3D {
+export function buildDeco(kind: DecoKind, theme: WorldTheme, scale: number, text?: string, angle = 0.6): THREE.Object3D {
   const g = new THREE.Group();
   const leaf = theme.top;
   switch (kind) {
@@ -139,6 +140,22 @@ export function buildDeco(kind: DecoKind, theme: WorldTheme, scale: number, text
       board.position.set(0, 2.55, 0.1);
       board.castShadow = true;
       g.add(post, board);
+      break;
+    }
+    case 'arrow': {
+      // Chunky white "this way!" arrow floating over the road, tilted toward where you'll fly.
+      const shape = new THREE.Shape();
+      const pts: Array<[number, number]> = [[-1.3, -0.32], [0.2, -0.32], [0.2, -0.78], [1.35, 0], [0.2, 0.78], [0.2, 0.32], [-1.3, 0.32]];
+      shape.moveTo(pts[0][0], pts[0][1]);
+      for (const p of pts.slice(1)) shape.lineTo(p[0], p[1]);
+      shape.closePath();
+      const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 2 });
+      geo.translate(0, 0, -0.15);
+      const m = new THREE.Mesh(geo, arrowMat);
+      m.rotation.z = angle;
+      m.position.y = 3.4;
+      m.castShadow = true;
+      g.add(m);
       break;
     }
     case 'cloud':

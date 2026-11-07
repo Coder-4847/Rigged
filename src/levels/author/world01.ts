@@ -2,227 +2,215 @@ import { LevelBuilder } from '../builder';
 import type { LevelData } from '../types';
 
 /**
- * World 1 — Grasslands (levels 1–10). Tutorial world: throttle, brake, ramps, gaps, air tilt, seesaws.
- * Each level introduces or twists exactly one idea. Authoring helpers live in ../builder.ts;
- * run `npm run levels` to regenerate the JSON in src/levels/world01/.
+ * World 1 — Grasslands (levels 1–10). Tutorial world, but never a "hold → for 15 seconds" world: every level is
+ * short (roughly 10–20 s for a clean run) and something happens every couple of seconds — water gaps, crests that
+ * throw you into the air, boost strips, springs, seesaws, big ramps. Each level still leads with one idea.
+ * Authoring helpers live in ../builder.ts; run `npm run levels` to regenerate the JSON in src/levels/world01/.
  */
 const START = -30;
-const mk = (id: number, name: string, parTime: number, hint?: string) => {
-  const L = new LevelBuilder({ id, name, world: 1, parTime, antiFlip: 1, hint });
+const mk = (id: number, name: string, hint?: string) => {
+  const L = new LevelBuilder({ id, name, world: 1, parTime: 20, antiFlip: 1, hint });
   L.cursor = { x: START, y: 0 };
   return L;
 };
-const trees = ['tree', 'tree', 'bush', 'rock', 'flower'] as const;
+const trees = ['tree', 'tree', 'bush', 'pine', 'rock', 'flower', 'bush'] as const;
 
-/** 1 — First Drive: just hold gas. Hidden star is *behind* you. */
+/** Boost strip on the flat ground starting at the cursor (the ground must already exist there). */
+function boost(L: LevelBuilder, w = 8): void {
+  const x0 = L.cursor.x;
+  L.ground((t) => t.flat(w));
+  L.zone('boost', x0, x0 + w, { angle: 0 });
+}
+
+/** Spring pad at the cursor, then a water gap and a long landing. */
+function spring(L: LevelBuilder, gap = 12, power = 21, landing = 34): void {
+  L.ground((t) => t.flat(5));
+  L.push({ type: 'bounce', x: L.cursor.x - 2.5, y: L.cursor.y, w: 4, power });
+  L.ground((t) => t.gap(gap).flat(landing));
+}
+
+/** Wooden rope bridge over the water (planks drop a moment after you cross them). */
+function bridge(L: LevelBuilder, w = 18, delay = 0.8): void {
+  L.ground((t) => t.flat(6));
+  const x0 = L.cursor.x;
+  L.ground((t) => t.gap(w).flat(14));
+  L.push({ type: 'bridge', x: x0, y: L.cursor.y, w, delay });
+}
+
+/** Finish pad + hidden star + scenery. */
+function finish(L: LevelBuilder, runout = 26): LevelData {
+  L.ground((t) => t.flat(runout));
+  L.spawnAt(-12).finishAt(L.cursor.x - 12);
+  L.ground((t) => t.flat(34)); // run-off past the gate so a fast finish coasts to a stop on land
+  L.starAt(-26, 1.3);
+  L.scatter([...trees], -34, L.cursor.x, 7);
+  return L.build();
+}
+
+/** Two stars whose x the generator snaps onto the bot's line (0 = on it, 1 = on an airborne stretch). */
+function stars(L: LevelBuilder, a: number, b: number): void {
+  const at = (x: number, dy: number) => {
+    try {
+      return L.y(x) + dy;
+    } catch {
+      return 4; // over a gap
+    }
+  };
+  L.starAt(a, 0, at(a, 2.6)).starAt(b, 0, at(b, 3.4));
+}
+
+/** 1 — First Drive: hold gas. Crests, little hops over water, one proper ramp. */
 function l1(): LevelData {
-  const L = mk(1, 'First Drive', 18, 'Hold → to drive');
-  L.ground((t) => t.flat(55).ease(24, 3).flat(16).ease(26, -3).flat(28).bumps(36, 0.45, 5).flat(22).ease(30, 4).flat(56));
-  L.spawnAt(-10).finishAt(L.cursor.x - 14);
-  L.starAt(57, 2.4).starAt(137, 2.8).starAt(-26, 1.3);
-  L.sign(-8, 'HOLD → TO DRIVE').sign(110, 'BUMPS AHEAD');
-  L.scatter([...trees], -34, L.cursor.x, 9);
-  return L.build();
+  const L = mk(1, 'First Drive', 'Hold → to drive');
+  L.ground((t) => t.flat(28).ease(12, 2).ease(12, -2).flat(8).launch(7, 1.4).gap(5).flat(14).ease(12, 2.4).ease(12, -2.4).flat(6));
+  L.arrow(L.cursor.x + 6);
+  L.ground((t) => t.launch(9, 2.2).gap(7).flat(16).ease(16, -2.2).flat(6).bumps(16, 0.45, 4));
+  bridge(L, 18, 1);
+  boost(L, 6);
+  L.ground((t) => t.launch(10, 2.6).gap(8).flat(14).ease(14, -2.6));
+  stars(L, 40, 82);
+  L.sign(-6, 'HOLD → TO DRIVE');
+  return finish(L);
 }
 
-/** 2 — Brake Check: a long descent builds speed; ease off and use ← to stay in control. */
+/** 2 — Splash Jumps: ramp after ramp over the water, each a little bigger. */
 function l2(): LevelData {
-  const L = mk(2, 'Brake Check', 22, 'Press ← to brake (hold to reverse)');
-  L.ground((t) =>
-    t
-      .flat(40)
-      .ease(20, -1)
-      .slope(56, -11)
-      .ease(14, -1)
-      .flat(26)
-      .ease(18, 2.5)
-      .ease(18, -2.5)
-      .flat(14)
-      .ease(18, 2.5)
-      .ease(18, -2.5)
-      .flat(16)
-      .launch(8, 1.4)
-      .gap(5)
-      .flat(34)
-      .ease(24, 3)
-      .flat(50),
-  );
-  L.spawnAt(-12).finishAt(L.cursor.x - 14);
-  L.starAt(40, 3).starAt(180, 3.2).starAt(-26, 1.3);
-  L.sign(-10, '← BRAKE').sign(20, 'STEEP HILL — EASE OFF');
-  L.scatter([...trees], -34, L.cursor.x, 10);
-  return L.build();
+  const L = mk(2, 'Splash Jumps', 'Keep the gas down over the water');
+  L.ground((t) => t.flat(24).launch(7, 1.4).gap(5).flat(12).launch(8, 1.8).gap(6).flat(12).launch(9, 2.2).gap(7).flat(12));
+  L.arrow(L.cursor.x + 4);
+  L.ground((t) => t.launch(11, 3).gap(9).flat(14).ease(20, -6.4).flat(8));
+  boost(L, 8);
+  L.ground((t) => t.flat(2).launch(12, 3.4).gap(12).flat(18).ease(16, -3.4));
+  stars(L, 30, 120);
+  L.sign(-6, 'RAMP → WATER → KEEP GOING');
+  return finish(L);
 }
 
-/** 3 — Little Hops: ramps and small gaps. */
+/** 3 — Drop Zone: drive off ledges onto downhill runs, then brake for a tight landing pad. */
 function l3(): LevelData {
-  const L = mk(3, 'Little Hops', 18, 'Ramps launch you over gaps');
-  L.ground((t) =>
-    t
-      .flat(46)
-      .launch(7, 1.4)
-      .gap(4)
-      .flat(26)
-      .launch(8, 1.8)
-      .gap(5.5)
-      .flat(26)
-      .launch(9, 2.2)
-      .gap(6.5)
-      .flat(30)
-      .ease(20, 2)
-      .flat(12)
-      .launch(9, 2)
-      .gap(6)
-      .flat(60),
-  );
-  L.spawnAt(-12).finishAt(L.cursor.x - 14);
-  L.starAt(21, 3, 3.6).starAt(89, 3.4, 4.2).starAt(-26, 1.3);
-  L.sign(0, 'RAMP → GAP: KEEP YOUR SPEED');
-  L.scatter([...trees], -34, L.cursor.x, 10);
-  return L.build();
+  const L = mk(3, 'Drop Zone', 'Press ← to brake (hold to reverse)');
+  L.cursor = { x: START, y: 8 };
+  L.ground((t) => t.flat(26).gap(6, -2.5).slope(26, -5.5).flat(10).ease(10, 1.6).gap(6, -1.6).slope(20, -4).flat(10));
+  L.ground((t) => t.bumps(18, 0.5, 4).flat(6).launch(9, 2.2).gap(7).flat(12).ease(12, -2.2));
+  L.ground((t) => t.flat(10).slope(18, -6).flat(4).launch(9, 2.4).gap(8).flat(12).ease(12, -2.4).flat(4).gap(5, -2).slope(14, -3).flat(6));
+  stars(L, 22, 70);
+  L.sign(-6, '← BRAKES');
+  return finish(L);
 }
 
-/** 4 — Nose Up: air tilt. Land with your wheels on the slope. */
+/** 4 — Nose Up: air tilt to match the landing slope. */
 function l4(): LevelData {
-  const L = mk(4, 'Nose Up', 18, 'Tilt in the air with ↑ / ↓');
-  L.ground((t) =>
-    t
-      .flat(46)
-      .launch(14, 4.5)
-      .gap(11, -5)
-      .slope(24, -8) // downhill landing: tilt nose DOWN to match
-      .flat(26)
-      .launch(12, 4.2)
-      .gap(7, 1.5)
-      .slope(22, 6) // uphill landing: tilt nose UP
-      .flat(24)
-      .launch(14, 4.5)
-      .gap(10, -3)
-      .flat(60),
-  );
-  L.spawnAt(-12).finishAt(L.cursor.x - 14);
-  L.starAt(26, 3, 6).starAt(130, 3, 11).starAt(-26, 1.3);
-  L.sign(8, '↑ NOSE UP   ↓ NOSE DOWN');
-  L.scatter([...trees], -34, L.cursor.x, 10);
-  return L.build();
+  const L = mk(4, 'Nose Up', 'Tilt in the air with ↑ / ↓');
+  L.ground((t) => t.flat(26).launch(12, 4).gap(10, -4).slope(20, -7).flat(12));
+  L.ground((t) => t.launch(11, 3.6).gap(7, 1.4).slope(16, 5).flat(10));
+  L.ground((t) => t.launch(12, 4).gap(10, -3.5).slope(18, -6).flat(8).ease(10, 2).ease(10, -2).flat(6));
+  boost(L, 6);
+  L.ground((t) => t.launch(14, 4.6).gap(12, -4).slope(22, -7).flat(8));
+  stars(L, 30, 112);
+  L.sign(-6, '↑ NOSE UP   ↓ NOSE DOWN');
+  return finish(L);
 }
 
-/** 5 — Seesaw Sam: first seesaws. Drive steady across; the plank tips as you pass the middle. */
+/** 5 — Seesaw Sam: planks between hops. */
 function l5(): LevelData {
-  const L = mk(5, 'Seesaw Sam', 21, 'Drive steadily across the seesaw');
-  L.ground((t) => t.flat(70));
-  L.seesaw(START + 54, 12, 0.34);
-  L.ground((t) => t.flat(14).ease(18, 2).flat(60));
-  L.seesaw(L.cursor.x - 30, 14, 0.36);
-  L.ground((t) => t.flat(20).ease(16, -2).flat(24).launch(8, 1.6).gap(5).flat(60));
-  L.spawnAt(-12).finishAt(L.cursor.x - 14);
-  L.starAt(36, 3.2, 3.2).starAt(112, 3, 4).starAt(-26, 1.3);
-  L.sign(10, 'SEESAW: DRIVE ACROSS');
-  L.scatter([...trees], -34, L.cursor.x, 10);
-  return L.build();
+  const L = mk(5, 'Seesaw Sam', 'Seesaws tip as you cross — or launch you at full speed!');
+  L.ground((t) => t.flat(86));
+  L.seesaw(START + 44, 12, 0.34);
+  L.ground((t) => t.launch(8, 1.8).gap(6).flat(56));
+  L.seesaw(L.cursor.x - 46, 14, 0.36);
+  L.ground((t) => t.launch(8, 1.8).gap(6).flat(10).ease(10, -1.8).flat(54));
+  L.seesaw(L.cursor.x - 44, 12, 0.38);
+  boost(L, 6);
+  L.ground((t) => t.launch(10, 2.6).gap(8).flat(14).ease(12, -2.6));
+  stars(L, 40, 98);
+  L.sign(-6, 'SEESAW: DRIVE ACROSS');
+  return finish(L);
 }
 
-/** 6 — Rolling Hills: pure throttle control over big rolling terrain. */
+/** 6 — Whoops: fast crests throw you into the air — stars float above them. */
 function l6(): LevelData {
-  const L = mk(6, 'Rolling Hills', 22, 'Ease off at the crests to stay grounded');
+  const L = mk(6, 'Whoops', 'Crests throw you up — tilt to land flat');
   L.ground((t) => {
-    t.flat(44);
-    const hills: Array<[number, number]> = [[20, 4], [22, -5], [24, 6], [20, -4], [26, 7], [22, -7], [20, 5], [24, -6], [28, 8], [24, -8]];
+    t.flat(24);
+    const hills: Array<[number, number]> = [[10, 2.4], [10, -2.4], [11, 3], [11, -3], [12, 3.6], [12, -3.6]];
     for (const [w, h] of hills) t.ease(w, h);
-    t.flat(8).bumps(30, 0.6, 5).flat(40);
+    t.flat(6).launch(8, 1.8).gap(6).flat(10);
+    for (const [w, h] of hills) t.ease(w, h);
+    t.flat(6).bumps(16, 0.55, 4).flat(6);
   });
-  L.spawnAt(-12).finishAt(L.cursor.x - 14);
-  L.starAt(30, 3).starAt(110, 3.5).starAt(-26, 1.3);
-  L.scatter([...trees], -34, L.cursor.x, 9);
-  return L.build();
+  boost(L, 6);
+  L.ground((t) => t.ease(12, 3).ease(12, -3).ease(13, 4).ease(13, -4).flat(4));
+  stars(L, 34, 64);
+  L.sign(-6, 'WHOOPS AHEAD');
+  return finish(L);
 }
 
-/** 7 — Big Air: long, high jumps with generous landings. */
+/** 7 — Big Air: boost strips into mega ramps. Room for a backflip. */
 function l7(): LevelData {
-  const L = mk(7, 'Big Air', 22, 'Hit the ramp at full speed');
-  L.ground((t) =>
-    t
-      .flat(60)
-      .launch(18, 6.5)
-      .gap(13.5, -4)
-      .slope(34, -9)
-      .flat(26)
-      .launch(16, 6)
-      .gap(12, -3)
-      .flat(30)
-      .launch(20, 8)
-      .gap(15, -5)
-      .slope(30, -8)
-      .flat(60),
-  );
-  L.spawnAt(-12).finishAt(L.cursor.x - 14);
-  L.starAt(33, 4, 10).starAt(122, 4, 8).starAt(-26, 1.3);
-  L.sign(10, 'MEGA RAMP AHEAD');
-  L.scatter([...trees], -34, L.cursor.x, 10);
-  return L.build();
+  const L = mk(7, 'Big Air', 'Hit the ramp at full speed — try a flip!');
+  L.ground((t) => t.flat(22));
+  boost(L, 8);
+  L.arrow(L.cursor.x + 6);
+  L.ground((t) => t.flat(2).launch(16, 6).gap(16, -6).slope(26, -6).flat(10).ease(10, 2).ease(10, -2).flat(6));
+  boost(L, 8);
+  L.ground((t) => t.flat(2).launch(18, 7).gap(18, -6).slope(28, -8).flat(14));
+  stars(L, 30, 58);
+  L.sign(-6, 'MEGA RAMP AHEAD');
+  return finish(L);
 }
 
-/** 8 — Valley Run: build momentum down, then carry it up the far wall. */
+/** 8 — Bounce House: springs fling you over the water. */
 function l8(): LevelData {
-  const L = mk(8, 'Valley Run', 21, 'Carry your speed up the far side');
-  L.ground((t) =>
-    t
-      .flat(34)
-      .ease(30, -12)
-      .flat(16)
-      .ease(34, 14)
-      .flat(24)
-      .ease(30, -10)
-      .flat(12)
-      .ease(30, 13)
-      .flat(20)
-      .slope(22, 8)
-      .flat(14)
-      .launch(10, 2.4)
-      .gap(7)
-      .flat(60),
-  );
-  L.spawnAt(-12).finishAt(L.cursor.x - 14);
-  L.starAt(60, 4).starAt(220, 4, 7).starAt(-26, 1.3);
-  L.scatter([...trees, 'rock'], -34, L.cursor.x, 10);
-  return L.build();
+  const L = mk(8, 'Bounce House', 'Springs fling you — keep moving');
+  L.ground((t) => t.flat(26));
+  spring(L, 10, 19, 22);
+  L.ground((t) => t.ease(10, 2).ease(10, -2).flat(4));
+  spring(L, 12, 21, 18);
+  L.ground((t) => t.launch(8, 1.8).gap(6).flat(10).ease(10, -1.8).flat(6));
+  spring(L, 14, 23, 30);
+  stars(L, 22, 70);
+  L.sign(-6, 'SPRINGS!');
+  return finish(L);
 }
 
-/** 9 — Seesaw Gauntlet: three planks, changing heights. */
+/** 9 — Mixed Bag: seesaw, springs, whoops and a drop, back to back. */
 function l9(): LevelData {
-  const L = mk(9, 'Seesaw Gauntlet', 23, 'Plank after plank — stay smooth');
-  L.ground((t) => t.flat(66));
-  L.seesaw(START + 54, 12, 0.36);
-  L.ground((t) => t.flat(4).ease(12, 2.5).flat(34));
-  L.seesaw(L.cursor.x - 16, 14, 0.38);
-  L.ground((t) => t.flat(8).ease(14, -3).flat(34));
-  L.seesaw(L.cursor.x - 18, 16, 0.4);
-  L.ground((t) => t.flat(14).launch(9, 1.8).gap(6).flat(26).ease(20, 3).flat(50));
-  L.spawnAt(-12).finishAt(L.cursor.x - 14);
-  L.starAt(40, 3, 3.6).starAt(120, 3.4, 5).starAt(-26, 1.3);
-  L.scatter([...trees], -34, L.cursor.x, 10);
-  return L.build();
+  const L = mk(9, 'Mixed Bag', 'A bit of everything — stay smooth');
+  L.ground((t) => t.flat(72));
+  L.seesaw(START + 38, 12, 0.36);
+  L.ground((t) => t.ease(10, 2.6).ease(10, -2.6).ease(11, 3.2).ease(11, -3.2).flat(4));
+  spring(L, 12, 21, 26);
+  L.seesaw(L.cursor.x - 13, 12, 0.36);
+  L.ground((t) => t.flat(2).launch(11, 3.6).gap(8, -3.6).slope(16, -4).flat(6));
+  bridge(L, 22, 0.6);
+  boost(L, 6);
+  L.ground((t) => t.launch(12, 3.2).gap(10).flat(14).ease(14, -3.2));
+  stars(L, 26, 110);
+  return finish(L);
 }
 
-/** 10 — Grasslands Gauntlet: boss run mixing hills, ramps, tilt landings and a seesaw. 2 checkpoints. */
+/** 10 — Grasslands Gauntlet: everything, two checkpoints. */
 function l10(): LevelData {
-  const L = mk(10, 'Grasslands Gauntlet', 48, 'Everything you learned — one run');
-  L.ground((t) =>
-    t.flat(44).ease(24, 3).ease(24, -4).bumps(28, 0.55, 4).flat(10).launch(10, 2.4).gap(6).flat(24).launch(14, 4.5).gap(11, -5).slope(22, -7).flat(20),
-  );
-  const cp1 = L.cursor.x - 8;
-  L.ground((t) => t.flat(30));
-  L.seesaw(L.cursor.x - 15, 14, 0.38);
-  L.ground((t) => t.flat(10).ease(20, 4).ease(20, -5).flat(18).launch(18, 6.5).gap(14, -4).slope(30, -8).flat(28));
-  const cp2 = L.cursor.x - 8;
-  L.ground((t) => t.launch(12, 4.2).gap(7, 1.5).slope(22, 6).flat(20).bumps(30, 0.6, 5).flat(14).launch(9, 2).gap(6).flat(40));
-  L.seesaw(L.cursor.x - 18, 16, 0.38);
-  L.ground((t) => t.flat(30).launch(14, 4.5).gap(10, -3).flat(60));
-  L.spawnAt(-12).checkpointAt(cp1).checkpointAt(cp2).finishAt(L.cursor.x - 14);
-  L.starAt(40, 3).starAt(cp1 - 30, 4, 6).starAt(-26, 1.3);
-  L.sign(0, 'GAUNTLET: 2 CHECKPOINTS');
-  L.scatter([...trees], -34, L.cursor.x, 9);
-  return L.build();
+  const L = mk(10, 'Grasslands Gauntlet', 'Everything you learned — one run');
+  L.ground((t) => t.flat(26).ease(10, 2.4).ease(10, -2.4).launch(8, 1.8).gap(6).flat(10).launch(12, 4).gap(10, -4).slope(18, -6).flat(10));
+  L.ground((t) => t.flat(50));
+  L.seesaw(L.cursor.x - 36, 12, 0.36);
+  const cp1 = L.cursor.x - 12;
+  spring(L, 12, 21, 24);
+  boost(L, 8);
+  L.ground((t) => t.flat(2).launch(16, 6).gap(16, -6).slope(24, -6).flat(14));
+  const cp2 = L.cursor.x - 6;
+  bridge(L, 20, 0.6);
+  L.ground((t) => t.ease(11, 3).ease(11, -3).ease(12, 3.6).ease(12, -3.6).flat(4).launch(11, 3.6).gap(7, 1.4).slope(14, 4).flat(10).ease(14, -9).flat(32));
+  L.seesaw(L.cursor.x - 16, 14, 0.38);
+  L.ground((t) => t.flat(12));
+  spring(L, 12, 22, 20);
+  boost(L, 6);
+  L.ground((t) => t.launch(14, 4.6).gap(12, -4).slope(22, -7).flat(10));
+  L.checkpointAt(cp1).checkpointAt(cp2);
+  stars(L, 60, cp2 + 30);
+  L.sign(-6, 'GAUNTLET: 2 CHECKPOINTS');
+  return finish(L);
 }
 
 export const world01: LevelData[] = [l1(), l2(), l3(), l4(), l5(), l6(), l7(), l8(), l9(), l10()];

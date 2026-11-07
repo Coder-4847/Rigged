@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { block } from './geometry';
-import { buildTerrainMesh } from './TerrainMesh';
+import { buildTerrainMesh, LANE_BACK, LANE_FRONT } from './TerrainMesh';
+import { Sea } from './Sea';
 import { Background } from './Background';
 import { buildDeco, isShared, mergeStatic } from './Scenery';
 import { FinishView, FlagView, StarView } from './Pickups';
@@ -63,6 +64,7 @@ export class LevelView {
   readonly flags: FlagView[] = [];
   readonly finish: FinishView;
   readonly background: Background;
+  readonly sea: Sea;
   private seesaws: SeesawView[] = [];
   private hazards: HazardView[] = [];
   private hazardSpans: Array<[number, number]> = [];
@@ -75,16 +77,27 @@ export class LevelView {
     physics: LevelPhysics,
   ) {
     const statics: THREE.Object3D[] = [];
+    const xs = data.cameraBounds;
+    // The sea sits a little below the lowest road in the level, so every gap shows water underneath.
+    const terrainYs = data.entities.flatMap((e) => (e.type === 'terrain' ? e.points.map((p) => p[1]) : []));
+    const seaY = (terrainYs.length ? Math.min(...terrainYs) : 0) - 3.2;
+    this.sea = new Sea(theme, xs.minX, xs.maxX, seaY);
+    this.root.add(this.sea.group);
     for (const e of data.entities) {
       if (e.type === 'terrain') {
         const st = e.surface && e.surface !== 'grass' ? SURFACE_STYLE[e.surface] : undefined;
-        this.root.add(buildTerrainMesh(e.points, e.depth ?? 14, { dirt: st?.dirt ?? theme.dirt, top: st?.top ?? theme.top, turf: 0.7 }));
+        this.root.add(buildTerrainMesh(e.points, e.depth ?? 14, { dirt: st?.dirt ?? theme.dirt, top: st?.top ?? theme.top, turf: 0.75, face: e.surface === 'metal' ? 'plate' : e.surface === 'rock' || e.surface === 'ice' ? 'stone' : theme.face }));
+        const minY = Math.min(...e.points.map((p) => p[1]));
+        if (minY - (e.depth ?? 14) < seaY) this.sea.addFoam(e.points[0][0], e.points[e.points.length - 1][0]);
       } else if (e.type === 'ceiling') {
         this.root.add(buildCeilingMesh(e.points, e.thickness ?? 8, theme));
       } else if (e.type === 'deco') {
-        const d = buildDeco(e.kind, theme, e.scale ?? 1, e.text);
-        d.position.set(e.x, e.y, e.z ?? -6);
-        if (e.kind !== 'sign') d.rotation.y = (e.x * 0.37) % 0.6;
+        const d = buildDeco(e.kind, theme, e.scale ?? 1, e.text, e.angle);
+        // Scenery was authored for a deep field; squeeze it onto the narrow causeway (behind the lane).
+        const z0 = e.z ?? -6;
+        const z = e.kind === 'sign' || e.kind === 'arrow' ? z0 : -(LANE_FRONT + 0.9) - ((Math.min(31, -z0) - 5) / 26) * (LANE_BACK - LANE_FRONT - 2.2);
+        d.position.set(e.x, e.y, z);
+        if (e.kind !== 'sign' && e.kind !== 'arrow') d.rotation.y = (e.x * 0.37) % 0.6;
         // signs carry their own texture; everything else is baked into merged meshes below
         if (e.kind === 'sign') this.root.add(d);
         else statics.push(d);
@@ -121,8 +134,7 @@ export class LevelView {
     this.finish = new FinishView(data.finish[0], data.finish[1]);
     this.root.add(this.finish.group);
 
-    const xs = data.cameraBounds;
-    this.background = new Background(theme, xs.maxX - xs.minX);
+    this.background = new Background(theme, xs.maxX - xs.minX, seaY, 46, xs.minX);
     this.root.add(this.background.group);
     scene.add(this.root);
   }
@@ -142,9 +154,11 @@ export class LevelView {
     for (const f of this.flags) f.update(dt, this.time);
     this.finish.update(this.time);
     this.background.update(dt, camX, camY);
+    this.sea.update(dt);
   }
 
   dispose(): void {
+    this.sea.dispose();
     this.root.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh && !isShared(m.geometry)) m.geometry.dispose();
@@ -165,8 +179,8 @@ function buildCeilingMesh(points: ReadonlyArray<readonly [number, number]>, thic
   for (let i = 1; i < points.length; i++) shape.lineTo(points[i][0], points[i][1]);
   shape.lineTo(last[0], topY);
   shape.closePath();
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: 40, bevelEnabled: true, bevelThickness: 0.15, bevelSize: 0.15, bevelOffset: -0.15, bevelSegments: 2 });
-  geo.translate(0, 0, -34);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: LANE_FRONT + LANE_BACK, bevelEnabled: true, bevelThickness: 0.15, bevelSize: 0.15, bevelOffset: -0.15, bevelSegments: 2 });
+  geo.translate(0, 0, -LANE_BACK);
   const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: SURFACE_STYLE.rock.dirt, roughness: 1 }));
   m.receiveShadow = true;
   g.add(m);

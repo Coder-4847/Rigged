@@ -399,6 +399,16 @@ export class AudioEngine {
     this.tone(t + 0.45, 'triangle', 1318.5, 1318.5, 0.7, 0.2);
   }
 
+  /** Trick landed: rising arpeggio + a nitro whoosh. `power` 0..1. */
+  trick(power: number): void {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const base = 523.25 * (1 + power * 0.5);
+    [1, 1.25, 1.5, 2].forEach((m, i) => this.tone(t + i * 0.055, 'square', base * m, base * m, 0.14, 0.1));
+    this.tone(t + 0.22, 'triangle', base * 2, base * 2.6, 0.3, 0.16);
+    this.noiseBurst(t + 0.05, 0.45, 0.12, 'bandpass', 300, 1800, 0.7);
+  }
+
   /** Quick whoosh for the screen wipe / respawn. */
   whoosh(): void {
     if (!this.ctx) return;

@@ -51,6 +51,7 @@ export class Hud {
       </div>
       <div class="hud-center"><div class="pill timer">00:00.0</div></div>
       <div class="hud-hint"></div>
+      <div class="hud-trick" aria-live="polite"><div class="t"></div><div class="s"></div></div>
       <div class="hud-bottom"><span class="pill deaths">☠ 0</span></div>`;
     parent.appendChild(this.root);
     this.timer = this.root.querySelector('.timer')!;
@@ -118,6 +119,20 @@ export class Hud {
       }
     });
   }
+
+  /** Big bouncy trick popup ("BACKFLIP!" / "+NITRO ×2 COMBO"). */
+  showTrick(title: string, sub: string, power: number): void {
+    const el = this.root.querySelector('.hud-trick') as HTMLElement;
+    (el.querySelector('.t') as HTMLElement).textContent = title;
+    (el.querySelector('.s') as HTMLElement).textContent = sub;
+    el.style.setProperty('--pow', String(1 + power * 0.35));
+    el.classList.remove('show');
+    void el.offsetWidth; // restart the animation
+    el.classList.add('show');
+    clearTimeout(this.trickTimer);
+    this.trickTimer = window.setTimeout(() => el.classList.remove('show'), 1500);
+  }
+  private trickTimer = 0;
 
   showHint(text: string, ms = 3000): void {
     this.hint.textContent = this.hintAdapter(text);

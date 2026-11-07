@@ -226,6 +226,14 @@ export class LevelBuilder {
     return this;
   }
 
+  /** Big white "go this way" arrow floating over the road (points up-right by default). */
+  arrow(x: number, angle = 0.6): this {
+    const y = surfaceY(this.lines, x);
+    if (y === null) return this;
+    this.ents.push({ type: 'deco', kind: 'arrow', x, y, z: -2.2, scale: 1, angle });
+    return this;
+  }
+
   sign(x: number, text: string): this {
     return this.deco('sign', x, -2.6, 1, text);
   }

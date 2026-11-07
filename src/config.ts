@@ -19,7 +19,9 @@ export const CONFIG = {
   render: {
     fov: 26,
     /** Camera pitch (degrees) looking slightly down at the lane — gives the blocks visible tops. */
-    pitchDeg: 9,
+    pitchDeg: 16,
+    /** Camera yaw (degrees): a slight 3/4 angle so block ends and the causeway's depth read like toys on a table. */
+    yawDeg: -9,
     /** Visible world width (metres) at the car plane, before speed zoom. */
     baseViewWidth: 34,
     /** Extra view width (metres) added at full speed. */
@@ -166,6 +168,8 @@ export interface VehicleLook {
   bigLights?: boolean;
   /** Chunky tread blocks. */
   knobby?: boolean;
+  /** Contrasting white roof cap on the cabin. */
+  roof?: boolean;
 }
 
 export const VEHICLE_IDS: VehicleId[] = ['hatch', 'jeep', 'buggy', 'monster', 'muscle', 'mini'];
@@ -174,18 +178,18 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
   hatch: {
     id: 'hatch',
     name: 'Blockhead',
-    blurb: 'Balanced hatchback. Forgiving, honest, a little cheeky.',
+    blurb: 'Chunky little lifted runabout. Forgiving, honest, a little cheeky.',
     body: { hx: 1.75, hy: 0.38, cy: -0.05, density: 1.6 },
     cabin: { hx: 0.95, hy: 0.36, cx: -0.25, cy: 0.69, density: 0.35 },
     wheel: { radius: 0.52, rearX: -1.2, frontX: 1.2, anchorY: -0.28, density: 1.1, friction: 1.5, frontFriction: 1.3 },
     suspension: { hz: 4.6, damping: 0.62, travel: 0.35 },
-    motor: { torque: 44, maxSpeed: 19, reverseFrac: 0.55, brakeTorque: 60, idleTorque: 3, drive: [1, 1] },
-    air: { tilt: 15, maxAngVel: 4.2, damping: 0.6 },
+    motor: { torque: 57.2, maxSpeed: 21.8, reverseFrac: 0.55, brakeTorque: 72, idleTorque: 3, drive: [1, 1] },
+    air: { tilt: 19.5, maxAngVel: 6.1, damping: 0.6 },
     downforce: 0.35,
     antiFlip: 1,
     boostAccel: 14,
-    color: 0xe8553a,
-    look: { cabin: 'slope', halfZ: 0.85, tireW: 0.46, spoiler: true },
+    color: 0xffc21a,
+    look: { cabin: 'box', halfZ: 0.85, tireW: 0.56, knobby: true, roof: true },
   },
   jeep: {
     id: 'jeep',
@@ -195,8 +199,8 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     cabin: { hx: 1.1, hy: 0.55, cx: -0.1, cy: 0.95, density: 0.4 },
     wheel: { radius: 0.62, rearX: -1.25, frontX: 1.25, anchorY: -0.3, density: 1.2, friction: 1.9, frontFriction: 1.2 },
     suspension: { hz: 3.9, damping: 0.7, travel: 0.45 },
-    motor: { torque: 74, maxSpeed: 18.6, reverseFrac: 0.6, brakeTorque: 85, idleTorque: 4, drive: [1, 1] },
-    air: { tilt: 24, maxAngVel: 3.6, damping: 0.7 },
+    motor: { torque: 96.2, maxSpeed: 21.4, reverseFrac: 0.6, brakeTorque: 102, idleTorque: 4, drive: [1, 1] },
+    air: { tilt: 31.2, maxAngVel: 5.2, damping: 0.7 },
     downforce: 0.4,
     antiFlip: 1.2,
     boostAccel: 14,
@@ -211,8 +215,8 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     cabin: { hx: 0.7, hy: 0.45, cx: -0.1, cy: 0.62, density: 0.12 },
     wheel: { radius: 0.6, rearX: -1.15, frontX: 1.25, anchorY: -0.2, density: 0.8, friction: 1.35, frontFriction: 1.2 },
     suspension: { hz: 5.2, damping: 0.55, travel: 0.5 },
-    motor: { torque: 46, maxSpeed: 20.5, reverseFrac: 0.55, brakeTorque: 55, idleTorque: 3, drive: [1, 1] },
-    air: { tilt: 26, maxAngVel: 5.2, damping: 0.4 },
+    motor: { torque: 53, maxSpeed: 23.5, reverseFrac: 0.55, brakeTorque: 66, idleTorque: 3, drive: [1, 1] },
+    air: { tilt: 33.8, maxAngVel: 7.5, damping: 0.4 },
     downforce: 0.5,
     antiFlip: 1.2,
     landGrace: 2.6,
@@ -228,8 +232,8 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     cabin: { hx: 1.0, hy: 0.6, cx: -0.1, cy: 1.25, density: 0.5 },
     wheel: { radius: 1.0, rearX: -1.4, frontX: 1.4, anchorY: -0.5, density: 1.3, friction: 2.0, frontFriction: 1.1 },
     suspension: { hz: 3.1, damping: 0.5, travel: 0.7 },
-    motor: { torque: 250, maxSpeed: 18.2, reverseFrac: 0.6, brakeTorque: 190, idleTorque: 8, drive: [1, 1] },
-    air: { tilt: 44, maxAngVel: 3.7, damping: 1.4 },
+    motor: { torque: 325, maxSpeed: 20.9, reverseFrac: 0.6, brakeTorque: 228, idleTorque: 8, drive: [1, 1] },
+    air: { tilt: 57.2, maxAngVel: 5.4, damping: 1.4 },
     downforce: 0.55,
     antiFlip: 2.0,
     landGrace: 3.2,
@@ -246,8 +250,8 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     cabin: { hx: 0.85, hy: 0.3, cx: -0.55, cy: 0.58, density: 0.35 },
     wheel: { radius: 0.5, rearX: -1.35, frontX: 1.4, anchorY: -0.26, density: 1.2, friction: 1.25, frontFriction: 0.9 },
     suspension: { hz: 6.5, damping: 0.8, travel: 0.3 },
-    motor: { torque: 62, maxSpeed: 22.5, reverseFrac: 0.5, brakeTorque: 75, idleTorque: 3, drive: [1, 0.15] },
-    air: { tilt: 13, maxAngVel: 4.6, damping: 0.5 },
+    motor: { torque: 80.6, maxSpeed: 25.9, reverseFrac: 0.5, brakeTorque: 90, idleTorque: 3, drive: [1, 0.15] },
+    air: { tilt: 16.9, maxAngVel: 6.7, damping: 0.5 },
     downforce: 0.55,
     antiFlip: 0.8,
     boostAccel: 16,
@@ -262,21 +266,21 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     cabin: { hx: 0.72, hy: 0.34, cx: -0.1, cy: 0.6, density: 0.35 },
     wheel: { radius: 0.4, rearX: -0.8, frontX: 0.85, anchorY: -0.22, density: 1.0, friction: 1.4, frontFriction: 1.2 },
     suspension: { hz: 5.0, damping: 0.6, travel: 0.28 },
-    motor: { torque: 22, maxSpeed: 17.5, reverseFrac: 0.55, brakeTorque: 30, idleTorque: 2, drive: [1, 1] },
-    air: { tilt: 6.5, maxAngVel: 5.4, damping: 0.5 },
+    motor: { torque: 28.6, maxSpeed: 20.1, reverseFrac: 0.55, brakeTorque: 36, idleTorque: 2, drive: [1, 1] },
+    air: { tilt: 8.5, maxAngVel: 7.8, damping: 0.5 },
     downforce: 0.3,
     antiFlip: 0.9,
     boostAccel: 14,
-    color: 0xffd23a,
+    color: 0x2ec4b6,
     look: { cabin: 'slope', halfZ: 0.72, tireW: 0.36, bigLights: true },
   },
 };
 
 /** Paint colours (unlocked by stars). */
 export const PAINTS: Array<{ color: number; name: string; stars: number }> = [
-  { color: 0xe8553a, name: 'Brick', stars: 0 },
+  { color: 0xffc21a, name: 'Sunny', stars: 0 },
   { color: 0x38b6ff, name: 'Sky', stars: 4 },
-  { color: 0xffd23a, name: 'Sunny', stars: 8 },
+  { color: 0xe8553a, name: 'Brick', stars: 8 },
   { color: 0x6fcf4a, name: 'Lime', stars: 14 },
   { color: 0xff8a3d, name: 'Tangerine', stars: 20 },
   { color: 0xb06bff, name: 'Grape', stars: 28 },

@@ -13,7 +13,7 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + production build into dist/
 npm run preview    # serve the production build
-npm test           # headless feel, hazard, save, unlock, input, music, level validation + bot smoke tests
+npm test           # headless feel, tricks, hazard, save, unlock, input, music, level validation + bot smoke tests
 npm run test:full  # test + every vehicle over every level
 ```
 
@@ -26,7 +26,7 @@ Dev URL flags: `?level=N` jumps straight into a level (skips the landing page), 
 | --- | --- | --- | --- |
 | Gas | → / D | RT | GAS (bottom right) |
 | Brake / reverse | ← / A | LT | BRAKE (bottom left) |
-| Air tilt (nose up / down) | ↑ / ↓ (W / S) | left stick, LB / RB, D-pad | tilt pair above BRAKE |
+| Air tilt (nose up / down) — flips earn nitro | ↑ / ↓ (W / S) | left stick, LB / RB, D-pad | tilt pair above BRAKE |
 | Boost / handbrake | Space | A | BOOST (when a level allows) |
 | Restart | R | Y / Select | top-left button |
 | Pause | Esc / P | Start | top-right button |
@@ -149,7 +149,7 @@ Built phase by phase (see the master prompt).
 
   | World | Levels | Twist |
   | --- | --- | --- |
-  | 1 Grasslands | 1–10 | tutorial: ramps, gaps, tilt, seesaws |
+  | 1 Grasslands | 1–10 | short, packed tutorial: water gaps, crests, boosts, springs, seesaws, rope bridges, mega ramps |
   | 2 Desert Ruins | 11–20 | sand, crumbling blocks, collapsing bridges, boulder chases, spike pits |
   | 3 Frostbite | 21–30 | ice, snowdrifts, icicles, icy slopes, thin ice |
   | 4 Factory | 31–40 | conveyors, gears, crushers, ferry platforms, steam vents, saws |
@@ -176,8 +176,8 @@ Built phase by phase (see the master prompt).
   levels of worlds 2/4/6/8/10. Five levels force a vehicle that suits them (12 jeep, 33 monster, 45 mini, 47 muscle,
   62 buggy), Chaos Circuit has vehicle-swap pads (`vehicle: 'garage'` hands back your own), the pause menu opens the
   garage, and after 10 deaths in a level the game suggests trying another vehicle.
-  **Validation:** `npm run vehicles` runs the bot with every vehicle over every level. Hatch, jeep, muscle and mini clear
-  99/99, the buggy 98/99, the monster 94/99 (some tall-truck / swinging-ball combos are deliberately harder);
+  **Validation:** `npm run vehicles` runs the bot with every vehicle over every level. Hatch, muscle and mini clear
+  99/99, the jeep 98/99, the buggy 96/99, the monster 96/99 (some tall-truck / swinging-ball combos are deliberately harder);
   the script requires 100% for the hatch and ≥90% for the rest. `npm run test:full` includes it.
 
 - **Phase 9 — Landing, audio, access, performance:**
@@ -198,6 +198,24 @@ Built phase by phase (see the master prompt).
   - *Performance*: static scenery is merged into a few meshes per material per 40 m slice (frustum culling still works),
     block geometry is shared, hazard views that are > 55 m from the camera neither update nor draw (loose physics props
     are exempt), and the game bundle is lazy-loaded.
+
+- **Phase 11 — Toy-island overhaul & pace pass:**
+  - *Look*: the world is now chunky toy islands standing in an animated sea — thick overhanging turf slabs on
+    brick / stone / riveted-plate blocks (`src/render/TerrainMesh.ts`), a narrow causeway with foam rings where blocks
+    meet the water (`src/render/Sea.ts`; lava worlds get a magma sea, labs glowing goo, the station open space),
+    low-poly faceted mountains, mid-distance islands and puffy clouds (`src/render/Background.ts`), a higher 3/4
+    camera (`render.pitchDeg` / `yawDeg`), brighter lighting, rope bridges with brick pillars, floating "this way"
+    arrows over big ramps, white chunky HUD pills, and a matching landing-page hero. The default Blockhead is now a
+    yellow lifted runabout with a white roof and knobby tyres (Sunny yellow is the starting paint).
+  - *Speed*: every vehicle has ~30% more torque and ~15% more top speed (the hatch tops out at ~22 m/s); airborne
+    wheels only spin a little faster than the car so landings stay stable; rhythm rows are re-synced to the new
+    cruise (`CRUISE` in `kit.ts`); dull lead-ins in the kit were trimmed.
+  - *World 1* was rewritten: every level is a 10–15 s clean run (the gauntlet ~30 s) with something every couple
+    of seconds — water hops, crests that throw you into the air, boost strips, springs, seesaw launches, rope bridges.
+  - *Tricks* (`src/core/Tricks.ts`): land a backflip / frontflip (hold ↑ / ↓ in the air) or big air on your wheels
+    and you get a popup, a sound and a **nitro burst**; chain them for a combo. Air spin limits were raised so a flip
+    off a big ramp is reachable. `npm run tricks` tests detection and payout.
+  - Pars are now derived from the bot for every world (World 1 included); every level has a run-off past the gate.
 
 Design decisions (ambiguities resolved for fun/readability): brake doubles as reverse once stopped; gas+brake together
 is a handbrake; air tilt is a dedicated axis (Up = nose up).

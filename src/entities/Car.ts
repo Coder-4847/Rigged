@@ -281,6 +281,12 @@ export class Car implements ContactOwner {
       const pitchNow = Math.atan2(sin, cos);
       if (pitchNow > 0.1 && ch.getAngularVelocity() > 0.3) torque *= Math.max(0.03, 1 - (ch.getAngularVelocity() - 0.3) / 0.9);
     }
+    // Airborne: the wheels only spin up gently (a free-spinning wheel at a much higher top speed would yank
+    // the nose up on touchdown).
+    if (!controlGrounded && !braking) {
+      const cap = (Math.abs(this.forwardSpeed) + 4) / wr;
+      if (Math.abs(target) > cap) target = Math.sign(target) * cap;
+    }
     this.drive += ((gas > 0.05 ? gas : brk > 0.05 ? -brk : 0) - this.drive) * Math.min(1, dt * 10);
     for (let i = 0; i < 2; i++) {
       const j = this.joints[i];

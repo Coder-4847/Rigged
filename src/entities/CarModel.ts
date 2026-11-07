@@ -21,8 +21,9 @@ const MAT = {
   dark: new THREE.MeshStandardMaterial({ color: 0x232830, roughness: 0.7, vertexColors: true }),
   chrome: new THREE.MeshStandardMaterial({ color: 0xcfd6dc, roughness: 0.25, metalness: 0.7, vertexColors: true }),
   glass: new THREE.MeshStandardMaterial({ color: 0x7cc4e8, roughness: 0.12, metalness: 0.35, vertexColors: true }),
-  rubber: new THREE.MeshStandardMaterial({ color: 0x1b1e23, roughness: 0.95 }),
-  rim: new THREE.MeshStandardMaterial({ color: 0xdfe4e8, roughness: 0.3, metalness: 0.6 }),
+  rubber: new THREE.MeshStandardMaterial({ color: 0x24272d, roughness: 0.9 }),
+  rim: new THREE.MeshStandardMaterial({ color: 0x4a5058, roughness: 0.55, metalness: 0.15 }),
+  roofCap: new THREE.MeshStandardMaterial({ color: 0xf6f4ee, roughness: 0.5, vertexColors: true }),
   skin: new THREE.MeshStandardMaterial({ color: 0xf2c9a0, roughness: 0.8, vertexColors: true }),
   cap: new THREE.MeshStandardMaterial({ color: 0x2b6cb0, roughness: 0.7, vertexColors: true }),
 };
@@ -226,6 +227,7 @@ export class CarModel {
       }
       this.part(this.mesh(profile(pts, bw * 0.84, 0.05), this.paint), cx, cyb, 0, hx, d.cabin.hy);
       this.part(this.mesh(profile(gl, bw * 0.84 + 0.04, 0.02, 0.9), MAT.glass), cx, cyb, 0, hx * 0.9, d.cabin.hy * 0.8);
+      if (L.roof) this.part(this.mesh(block(hx * 2 + 0.08, 0.16, bw * 0.9, 0.06, 0.95), MAT.roofCap), cx - 0.01, cyb + top + 0.02, 0, hx, 0.08);
     }
 
     // Driver head (cartoon, with cap) visible through the glass / in the open.
@@ -331,7 +333,7 @@ export class CarModel {
     const L = this.def.look;
     const tireW = L.tireW;
     const tire = tireGeometry(r, tireW);
-    const rimGeo = new THREE.CylinderGeometry(r * 0.62, r * 0.62, tireW + 0.02, 18).rotateX(Math.PI / 2);
+    const rimGeo = new THREE.CylinderGeometry(r * 0.52, r * 0.52, tireW + 0.02, 18).rotateX(Math.PI / 2);
     const hubGeo = new THREE.CylinderGeometry(r * 0.16, r * 0.16, tireW + 0.08, 10).rotateX(Math.PI / 2);
     const spokeGeo = block(r * 1.15, r * 0.14, tireW + 0.04, 0.02, 1);
     const knobby = !!L.knobby;

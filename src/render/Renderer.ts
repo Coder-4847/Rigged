@@ -20,11 +20,11 @@ export class Renderer {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.gl.shadowMap.type = THREE.PCFShadowMap;
     this.gl.outputColorSpace = THREE.SRGBColorSpace;
-    this.camera = new THREE.PerspectiveCamera(CONFIG.render.fov, 1, 1, 500);
+    this.camera = new THREE.PerspectiveCamera(CONFIG.render.fov, 1, 1, 700);
 
-    this.hemi = new THREE.HemisphereLight(0xcfe6ff, 0x4a4036, 1.15);
+    this.hemi = new THREE.HemisphereLight(0xeaf6ff, 0x7a9cc0, 1.35);
     this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xfff1d6, 2.3);
+    this.sun = new THREE.DirectionalLight(0xfff4dc, 2.5);
     this.sun.castShadow = true;
     const sc = this.sun.shadow.camera;
     sc.left = -30;
@@ -65,7 +65,7 @@ export class Renderer {
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     this.scene.background = tex;
-    this.scene.fog = new THREE.Fog(horizon, 70, 190);
+    this.scene.fog = new THREE.Fog(horizon, 120, 460);
   }
 
   setQuality(q: QualityName): void {
@@ -98,7 +98,7 @@ export class Renderer {
 
   /** Keep the sun (and shadow frustum) centred on the action. */
   followSun(x: number, y: number): void {
-    this.sun.position.set(x - 14, y + 28, 22);
+    this.sun.position.set(x - 16, y + 30, 26);
     this.sun.target.position.set(x, y, 0);
   }
 

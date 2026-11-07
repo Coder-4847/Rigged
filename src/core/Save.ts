@@ -69,8 +69,8 @@ function defaults(): SaveData {
     },
     lastLevel: 1,
     totalDeaths: 0,
-    garage: { vehicle: 'hatch', color: 0xe8553a, decal: 'none' },
-    unlocked: { vehicles: ['hatch'], colors: [0xe8553a], decals: ['none'] },
+    garage: { vehicle: 'hatch', color: 0xffc21a, decal: 'none' },
+    unlocked: { vehicles: ['hatch'], colors: [0xffc21a], decals: ['none'] },
   };
 }
 

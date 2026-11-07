@@ -3,7 +3,7 @@ import type { VehicleId } from '../config';
 export type Vec = [number, number];
 export type SurfaceType = 'grass' | 'sand' | 'ice' | 'snow' | 'metal' | 'rock' | 'goo';
 
-export type DecoKind = 'tree' | 'pine' | 'bush' | 'rock' | 'flower' | 'sign' | 'cloud' | 'cactus' | 'crate';
+export type DecoKind = 'tree' | 'pine' | 'bush' | 'rock' | 'flower' | 'sign' | 'cloud' | 'cactus' | 'crate' | 'arrow';
 
 export type ZoneKind = 'sand' | 'snow' | 'goo' | 'boost' | 'wind' | 'lowgrav' | 'flipgrav' | 'magnet' | 'vacuum';
 
@@ -15,7 +15,7 @@ export type EntityData =
   | { type: 'terrain'; points: Vec[]; depth?: number; surface?: SurfaceType }
   | { type: 'ceiling'; points: Vec[]; thickness?: number }
   | { type: 'seesaw'; x: number; y: number; width?: number; maxAngle?: number; rest?: number }
-  | { type: 'deco'; kind: DecoKind; x: number; y: number; z?: number; scale?: number; text?: string }
+  | { type: 'deco'; kind: DecoKind; x: number; y: number; z?: number; scale?: number; text?: string; angle?: number }
   // --- surfaces & forces
   | { type: 'zone'; kind: ZoneKind; x: number; y: number; w: number; h?: number; strength?: number; angle?: number }
   | { type: 'conveyor'; x: number; y: number; w: number; speed: number }

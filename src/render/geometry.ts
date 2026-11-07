@@ -53,7 +53,7 @@ export function profile(
 export function tireGeometry(radius: number, width: number): THREE.BufferGeometry {
   const hw = width / 2;
   const s = Math.min(0.12, width * 0.3);
-  const inner = radius * 0.6;
+  const inner = radius * 0.5;
   const pts = [
     new THREE.Vector2(inner, -hw),
     new THREE.Vector2(radius - s, -hw),

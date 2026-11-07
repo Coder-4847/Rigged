@@ -9,7 +9,7 @@ import { runBot } from './lib/bot';
 /**
  * Bot-driven post-processing: stars 0 and 1 are authored by x only — snap them onto the bot's proven
  * line (star 0 right on it, star 1 lifted off it so it takes a better line), and set par from the
- * bot's clean-run time (+20%) for worlds 2+ (World 1 pars were set by hand).
+ * bot's clean-run time (+20%) .
  */
 function snap(lv: LevelData): { finished: boolean; clean: number } {
   const r = runBot(lv, { retries: 120 });
@@ -33,7 +33,7 @@ function snap(lv: LevelData): { finished: boolean; clean: number } {
       lv.stars[1] = [round(q.x), round(q.y + (q.g ? 0.4 : 1.1))];
     }
   }
-  if (lv.world > 1) lv.parTime = Math.max(14, Math.round(r.cleanTime * 1.2 + 0.5));
+  lv.parTime = Math.max(8, Math.round(r.cleanTime * 1.2 + 0.5));
   return { finished: true, clean: r.cleanTime };
 }
 const round = (n: number) => Math.round(n * 100) / 100;

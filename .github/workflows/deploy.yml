@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, master, 'claude/new-session-cmxall']
+    branches: [main, master, 'claude/new-session-cmxall', 'claude/sharp-brahmagupta-063tga']
   workflow_dispatch:
 
 permissions:

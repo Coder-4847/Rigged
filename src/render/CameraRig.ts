@@ -103,7 +103,9 @@ export class CameraRig {
     const viewH = Math.max(viewW / aspect, viewW / 1.6);
     const dist = viewH / 2 / Math.tan(THREE.MathUtils.degToRad(CONFIG.render.fov / 2));
     const pitch = THREE.MathUtils.degToRad(CONFIG.render.pitchDeg);
-    cam.position.set(cx + sx, cy + sy + Math.sin(pitch) * dist, Math.cos(pitch) * dist);
+    const yaw = THREE.MathUtils.degToRad(CONFIG.render.yawDeg);
+    const flat = Math.cos(pitch) * dist;
+    cam.position.set(cx + sx + Math.sin(yaw) * flat, cy + sy + Math.sin(pitch) * dist, Math.cos(yaw) * flat);
     cam.up.set(Math.sin(roll), Math.cos(roll), 0);
     cam.lookAt(cx + sx, cy + sy, 0);
   }

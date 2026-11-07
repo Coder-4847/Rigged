@@ -23,10 +23,12 @@ export interface Ctx {
 const flat = (c: Ctx, w: number, surface: SurfaceType = 'grass') => void c.L.ground((t) => t.flat(w), surface);
 
 /**
- * Phase for the i-th hazard of a row so that a car cruising at ~16 m/s meets every one at the same point of
+ * Phase for the i-th hazard of a row so that a car cruising at ~CRUISE m/s meets every one at the same point of
  * its cycle (hazard i is reached i·spacing/v seconds later, so its clock must run that far *behind*).
  */
-const sync = (i: number, spacing: number, period: number): number => ((((-i * spacing) / 16 / period) % 1) + 1) % 1;
+/** Cruise speed (m/s) the rhythm rows are synced to (a car holding the gas). */
+const CRUISE = 21;
+const sync = (i: number, spacing: number, period: number): number => ((((-i * spacing) / CRUISE / period) % 1) + 1) % 1;
 
 /** Place a checkpoint 5 m back from the cursor (never twice in a row). */
 function checkpoint(c: Ctx): void {
@@ -74,6 +76,7 @@ export const K = {
   /** Ramp + gap + landing at (almost) the same height. */
   jump(c: Ctx, size: JumpSize = 'M', opts: { recover?: boolean; landing?: number } = {}) {
     const j = JUMPS[size];
+    if (size === 'L' || size === 'XL') c.L.arrow(here(c) + 4);
     c.L.ground((t) => {
       t.flat(10 * c.gs).launch(j.w, j.h).gap(j.gap * c.gs, j.drop * c.gs).flat(opts.landing ?? 16);
       if (opts.recover && j.drop) t.ease(26, -j.drop * c.gs);
@@ -106,16 +109,16 @@ export const K = {
     c.L.ground((t) => t.ease(26, drop).flat(10));
   },
 
-  zone(c: Ctx, kind: 'sand' | 'snow' | 'goo', w = 36, lead = 12) {
+  zone(c: Ctx, kind: 'sand' | 'snow' | 'goo', w = 36, lead = 8) {
     flat(c, lead);
     const x0 = here(c);
     flat(c, w);
     c.L.zone(kind, x0, x0 + w, { h: 8 });
-    flat(c, 24); // run-up to get back to speed before anything else
+    flat(c, 18); // run-up to get back to speed before anything else
   },
 
   conveyor(c: Ctx, w = 24, speed = 6) {
-    flat(c, 14);
+    flat(c, 10);
     const x0 = here(c);
     flat(c, w);
     c.L.push({ type: 'conveyor', x: x0, y: gy(c), w, speed });
@@ -123,7 +126,7 @@ export const K = {
   },
 
   boost(c: Ctx, w = 22) {
-    flat(c, 14);
+    flat(c, 10);
     const x0 = here(c);
     flat(c, w);
     c.L.zone('boost', x0, x0 + w, { angle: 0 });
@@ -275,7 +278,7 @@ export const K = {
 
   /** Big half-buried cogs: a gentle rotating hump with small teeth. */
   gears(c: Ctx, n = 2) {
-    flat(c, 16);
+    flat(c, 12);
     const x0 = here(c);
     flat(c, n * 15 + 6);
     for (let i = 0; i < n; i++) c.L.push({ type: 'gear', x: x0 + 9 + i * 15, y: gy(c) - 3 + 0.5, r: 3, speed: (i % 2 ? -1 : 1) * 1.4, teeth: 12 });
@@ -341,7 +344,7 @@ export const K = {
 
   /** Single crates spread along the road (the car shoves them along; stacks would be a wall). */
   crates(c: Ctx, n = 2, style: 'wood' | 'metal' = 'wood') {
-    flat(c, 22);
+    flat(c, 16);
     const x = here(c);
     flat(c, n * 28 + 10);
     for (let i = 0; i < n; i++) c.L.push({ type: 'crate', x: x + 4 + i * 28, y: gy(c), size: 1.3, style });
@@ -349,7 +352,7 @@ export const K = {
   },
 
   dominoes(c: Ctx, n = 7) {
-    flat(c, 22);
+    flat(c, 16);
     c.L.push({ type: 'dominoes', x: here(c), y: gy(c), n, spacing: 1.2 });
     flat(c, 24);
   },
@@ -562,10 +565,12 @@ export function makeLevel(s: LevelSpec): LevelData {
   }
   const startX = -12;
   s.body(c);
-  flat(c, 30);
+  flat(c, 24);
   L.finishAt(L.cursor.x - 12);
+  const finishX = L.cursor.x - 12;
+  flat(c, 30); // run-off past the gate so a fast finish coasts to a stop on land
   L.spawnAt(startX);
-  const len = L.cursor.x - 12 - startX;
+  const len = finishX - startX;
   // stars 0/1: x only — gen-levels snaps y onto the bot's proven line (0 = on it, 1 = lifted off it)
   // (manual levels keep these positions, so put them a sensible height above the ground)
   const above = (x: number) => {
